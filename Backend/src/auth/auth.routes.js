@@ -1,246 +1,283 @@
-import express from "express";
+import { Router } from "express";
+import crypto from "crypto";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import crypto from "crypto";
 import { pool } from "../db/pool.js";
-import { logActivity } from "../activity/activity.routes.js";     
+import { requireAuth } from "../middleware/auth.middleware.js";
+import { logActivity } from "../activity/activity.routes.js";
+import { sendPasswordResetCode } from "../services/email.service.js";
 
-const router = express.Router();
+const router = Router();
 
+// --------------------------------------------------
+// POST /api/auth/login
+// --------------------------------------------------
 router.post("/login", async (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({ error: "Email and password are required" });
-  }
-
   try {
+    const email = (req.body.email || "").trim().toLowerCase();
+    const password = req.body.password || "";
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+
     const result = await pool.query(
-      "SELECT id, first_name, last_name, email, password_hash, role, status, must_change_password FROM users WHERE email = $1",
+      `SELECT id, first_name, last_name, email, password_hash, role, status, must_change_password
+       FROM users
+       WHERE LOWER(email) = $1`,
       [email]
     );
 
-    const user = result.rows[0];
-
-    // Same error for "no user" and "wrong password" — never reveal which one failed
-    if (!user) {
+    if (result.rows.length === 0) {
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
-    if (user.status === "Disabled") {
-      return res.status(403).json({ error: "This account has been disabled" });
+    const user = result.rows[0];
+
+    if (user.status && user.status !== "Active") {
+      return res.status(403).json({ error: "Account is disabled" });
     }
 
-    const passwordMatches = await bcrypt.compare(password, user.password_hash);
-
-    if (!passwordMatches) {
+    const match = await bcrypt.compare(password, user.password_hash);
+    if (!match) {
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
     const token = jwt.sign(
-  {
-    userId: user.id,
-    email: user.email,
-    role: user.role,
-  },
-  process.env.JWT_SECRET,
-  { expiresIn: "8h" }
-);
-   await logActivity({
-  userId: user.id,
-  userName: user.email,
-  action: "User logged in",
-  detail: null,
-});
+      {
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "8h" }
+    );
+
+    await logActivity({
+      userId: user.id,
+      userName: user.email,
+      action: "User logged in",
+      detail: null,
+    });
+
     res.json({
       token,
       user: {
         id: user.id,
+        userId: user.id,
         firstName: user.first_name,
         lastName: user.last_name,
         email: user.email,
         role: user.role,
+        mustChangePassword: user.must_change_password === true,
       },
-      mustChangePassword: user.must_change_password,
     });
   } catch (err) {
     console.error("Login error:", err.message);
-    res.status(500).json({ error: "Something went wrong, please try again" });
+    res.status(500).json({ error: "Could not login" });
   }
 });
 
 // --------------------------------------------------
-// POST /api/auth/forgot-password
-// body: { email }
+// POST /api/auth/forgot-password  { email }
 // --------------------------------------------------
 router.post("/forgot-password", async (req, res) => {
   try {
-    const { email } = req.body;
-
+    const email = (req.body.email || "").trim().toLowerCase();
     if (!email) {
       return res.status(400).json({ error: "Email is required" });
     }
 
-    // Toujours le même message (ne pas révéler si l'email existe)
-    const genericMessage =
-      "If an account exists with this email, a reset link has been generated.";
+    const generic = {
+      message: "If an account exists for this email, a reset code has been sent.",
+    };
 
-    const result = await pool.query(
-      "SELECT id, email, status FROM users WHERE email = $1",
+    const userRes = await pool.query(
+      `SELECT id, email, status FROM users WHERE LOWER(email) = $1`,
       [email]
     );
 
-    const user = result.rows[0];
-
-    // Pas d'utilisateur ou compte désactivé → on ne dit rien de plus
-    if (!user || user.status === "Disabled") {
-      return res.json({ message: genericMessage });
+    if (userRes.rows.length === 0) {
+      return res.json(generic);
     }
 
-    // Token aléatoire sécurisé
-    const token = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+    const user = userRes.rows[0];
+    if (user.status && user.status !== "Active") {
+      return res.json(generic);
+    }
+
+    const code = String(crypto.randomInt(100000, 999999));
+    const expires = new Date(Date.now() + 15 * 60 * 1000);
 
     await pool.query(
-      `INSERT INTO password_reset_tokens (user_id, token, expires_at)
-       VALUES ($1, $2, $3)`,
-      [user.id, token, expiresAt]
+      `UPDATE password_reset_codes SET used = true
+       WHERE user_id = $1 AND used = false`,
+      [user.id]
     );
 
-    // En dev : pas d'email → on renvoie le lien pour tester
-    // En production : on enverrait un vrai email et on NE renverrait PAS le token
-    const resetLink = `http://localhost:5173/reset-password?token=${token}`;
+    await pool.query(
+      `INSERT INTO password_reset_codes (user_id, email, code, expires_at)
+       VALUES ($1, $2, $3, $4)`,
+      [user.id, email, code, expires]
+    );
 
-    console.log("Password reset link:", resetLink);
+    await sendPasswordResetCode({ to: email, code });
 
-    res.json({
-      message: genericMessage,
-      // visible seulement en développement pour tes tests
-      resetLink,
-    });
+    res.json(generic);
   } catch (err) {
     console.error("Forgot password error:", err.message);
-    res.status(500).json({ error: "Something went wrong" });
+    res.status(500).json({ error: "Could not process request" });
   }
 });
 
 // --------------------------------------------------
-// POST /api/auth/reset-password
-// body: { token, newPassword }
+// POST /api/auth/verify-reset-code  { email, code }
 // --------------------------------------------------
-router.post("/reset-password", async (req, res) => {
+router.post("/verify-reset-code", async (req, res) => {
   try {
-    const { token, newPassword } = req.body;
+    const email = (req.body.email || "").trim().toLowerCase();
+    const code = (req.body.code || "").trim();
 
-    if (!token || !newPassword) {
-      return res.status(400).json({ error: "Token and new password are required" });
-    }
-
-    if (newPassword.length < 8) {
-      return res.status(400).json({ error: "Password must be at least 8 characters" });
+    if (!email || !code) {
+      return res.status(400).json({ error: "Email and code are required" });
     }
 
     const result = await pool.query(
-      `SELECT id, user_id, expires_at, used_at
-       FROM password_reset_tokens
-       WHERE token = $1`,
-      [token]
+      `SELECT id, expires_at, used FROM password_reset_codes
+       WHERE LOWER(email) = $1 AND code = $2
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [email, code]
     );
 
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: "Invalid code" });
+    }
+
     const row = result.rows[0];
-
-    if (!row) {
-      return res.status(400).json({ error: "Invalid or expired reset link" });
+    if (row.used) {
+      return res.status(400).json({ error: "Code already used" });
     }
-
-    if (row.used_at) {
-      return res.status(400).json({ error: "This reset link has already been used" });
-    }
-
     if (new Date(row.expires_at) < new Date()) {
-      return res.status(400).json({ error: "This reset link has expired" });
+      return res.status(400).json({ error: "Code expired" });
     }
 
-    const passwordHash = await bcrypt.hash(newPassword, 10);
+    res.json({ message: "Code valid", valid: true });
+  } catch (err) {
+    console.error("Verify code error:", err.message);
+    res.status(500).json({ error: "Could not verify code" });
+  }
+});
+
+// --------------------------------------------------
+// POST /api/auth/reset-password  { email, code, newPassword }
+// --------------------------------------------------
+router.post("/reset-password", async (req, res) => {
+  try {
+    const email = (req.body.email || "").trim().toLowerCase();
+    const code = (req.body.code || "").trim();
+    const newPassword = req.body.newPassword || "";
+
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({
+        error: "Email, code and newPassword are required",
+      });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        error: "Password must be at least 8 characters",
+      });
+    }
+
+    const result = await pool.query(
+      `SELECT id, user_id, expires_at, used FROM password_reset_codes
+       WHERE LOWER(email) = $1 AND code = $2
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [email, code]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: "Invalid code" });
+    }
+
+    const row = result.rows[0];
+    if (row.used) {
+      return res.status(400).json({ error: "Code already used" });
+    }
+    if (new Date(row.expires_at) < new Date()) {
+      return res.status(400).json({ error: "Code expired" });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 10);
 
     await pool.query(
       `UPDATE users
        SET password_hash = $1, must_change_password = false
        WHERE id = $2`,
-      [passwordHash, row.user_id]
+      [hash, row.user_id]
     );
 
     await pool.query(
-      `UPDATE password_reset_tokens SET used_at = now() WHERE id = $1`,
+      `UPDATE password_reset_codes SET used = true WHERE id = $1`,
       [row.id]
     );
 
-    res.json({ message: "Password has been reset successfully" });
+    res.json({ message: "Password updated successfully. You can log in." });
   } catch (err) {
     console.error("Reset password error:", err.message);
-    res.status(500).json({ error: "Something went wrong" });
+    res.status(500).json({ error: "Could not reset password" });
   }
 });
-export default router;
-// POST /api/auth/change-password
-// Nécessite d'être connecté (token JWT)
-router.post("/change-password", async (req, res) => {
-  const { currentPassword, newPassword } = req.body;
 
-  // 1. Vérifier que le token est présent
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Access denied. No token provided." });
-  }
-
-  const token = authHeader.split(" ")[1];
-
+// --------------------------------------------------
+// POST /api/auth/change-password  (user connecté)
+// --------------------------------------------------
+router.post("/change-password", requireAuth, async (req, res) => {
   try {
-    // 2. Décoder le token pour récupérer l'userId
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const userId = decoded.userId;
+    const { currentPassword, newPassword } = req.body;
 
     if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: "Current password and new password are required" });
+      return res.status(400).json({ error: "currentPassword and newPassword are required" });
     }
-
-    // 3. Règles de robustesse du nouveau mot de passe
     if (newPassword.length < 8) {
-      return res.status(400).json({ error: "New password must be at least 8 characters" });
+      return res.status(400).json({ error: "Password must be at least 8 characters" });
     }
 
-    // 4. Récupérer l'utilisateur
     const result = await pool.query(
-      "SELECT id, password_hash FROM users WHERE id = $1",
-      [userId]
+      `SELECT id, password_hash FROM users WHERE id = $1`,
+      [req.user.userId]
     );
-
-    const user = result.rows[0];
-    if (!user) {
+    if (result.rows.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    // 5. Vérifier l'ancien mot de passe
-    const passwordMatches = await bcrypt.compare(currentPassword, user.password_hash);
-    if (!passwordMatches) {
+    const user = result.rows[0];
+    const match = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!match) {
       return res.status(401).json({ error: "Current password is incorrect" });
     }
 
-    // 6. Hasher le nouveau mot de passe
-    const newHash = await bcrypt.hash(newPassword, 10);
-
-    // 7. Mettre à jour + désactiver must_change_password
+    const hash = await bcrypt.hash(newPassword, 10);
     await pool.query(
-      "UPDATE users SET password_hash = $1, must_change_password = false WHERE id = $2",
-      [newHash, userId]
+      `UPDATE users
+       SET password_hash = $1, must_change_password = false
+       WHERE id = $2`,
+      [hash, user.id]
     );
+
+    await logActivity({
+      userId: req.user.userId,
+      userName: req.user.email || `User #${req.user.userId}`,
+      action: "Changed password",
+      detail: null,
+    });
 
     res.json({ message: "Password changed successfully" });
   } catch (err) {
     console.error("Change password error:", err.message);
-    if (err.name === "JsonWebTokenError" || err.name === "TokenExpiredError") {
-      return res.status(401).json({ error: "Invalid or expired token" });
-    }
-    res.status(500).json({ error: "Something went wrong" });
+    res.status(500).json({ error: "Could not change password" });
   }
 });
+
+export default router;

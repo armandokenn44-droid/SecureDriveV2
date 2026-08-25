@@ -1,44 +1,159 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import "./Login.css";
+import { Link, useNavigate } from "react-router-dom";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
+const box = {
+  minHeight: "100vh",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "#f8fafc",
+  padding: 16,
+};
+
+const card = {
+  width: "100%",
+  maxWidth: 420,
+  background: "#fff",
+  borderRadius: 16,
+  padding: 32,
+  boxShadow: "0 10px 40px rgba(15,23,42,0.08)",
+};
+
+const inputStyle = {
+  width: "100%",
+  marginTop: 6,
+  marginBottom: 14,
+  padding: "12px 14px",
+  borderRadius: 10,
+  border: "1px solid #e2e8f0",
+  boxSizing: "border-box",
+  fontSize: "0.95rem",
+};
+
 export default function ForgotPassword() {
   const navigate = useNavigate();
+  const [step, setStep] = useState(1); // 1 email · 2 code · 3 password
   const [email, setEmail] = useState("");
-  const [message, setMessage] = useState("");
-  const [resetLink, setResetLink] = useState("");
-  const [error, setError] = useState("");
+  const [code, setCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+  const [cooldown, setCooldown] = useState(0);
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError("");
-    setMessage("");
-    setResetLink("");
+  // Compteur 5 min avant de redemander un code
+  function startCooldown() {
+    setCooldown(300); // 5 minutes = 300 secondes
+    const t = setInterval(() => {
+      setCooldown((s) => {
+        if (s <= 1) {
+          clearInterval(t);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+  }
+
+  function formatTime(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${String(s).padStart(2, "0")}`;
+  }
+
+  async function sendCode() {
     setLoading(true);
-
+    setError("");
+    setInfo("");
     try {
       const res = await fetch(`${API_BASE}/api/auth/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: email.trim() }),
       });
-
-      const data = await res.json();
-
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error || "Something went wrong");
-        setLoading(false);
+        setError(data.error || "Could not send code");
+        return false;
+      }
+      setInfo("If an account exists, a code was sent. Check the backend console (dev mode).");
+      startCooldown();
+      return true;
+    } catch {
+      setError("Cannot connect to server");
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleEmailNext(e) {
+    e.preventDefault();
+    if (!email.trim()) return;
+    const ok = await sendCode();
+    if (ok) setStep(2);
+  }
+
+  async function handleResend() {
+    if (cooldown > 0) return;
+    await sendCode();
+  }
+
+  async function handleCodeNext(e) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/verify-reset-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), code: code.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Invalid code");
         return;
       }
+      setStep(3);
+    } catch {
+      setError("Cannot connect to server");
+    } finally {
+      setLoading(false);
+    }
+  }
 
-      setMessage(data.message);
-      // En dev seulement : le backend renvoie le lien pour tester
-      if (data.resetLink) {
-        setResetLink(data.resetLink);
+  async function handleUpdatePassword(e) {
+    e.preventDefault();
+    setError("");
+    if (newPassword !== confirm) {
+      setError("Passwords do not match");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError("Password must be at least 8 characters");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim(),
+          code: code.trim(),
+          newPassword,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Could not update password");
+        return;
       }
+      setInfo("Password updated. Redirecting to login…");
+      setTimeout(() => navigate("/login"), 1500);
     } catch {
       setError("Cannot connect to server");
     } finally {
@@ -47,55 +162,115 @@ export default function ForgotPassword() {
   }
 
   return (
-    <div className="login-screen">
-      <div className="login-panel-right" style={{ margin: "auto" }}>
-        <form className="login-form" onSubmit={handleSubmit}>
-          <h2 className="login-form-title">Forgot password</h2>
-          <p className="login-form-subtitle">
-            Enter your email and we’ll generate a reset link.
-          </p>
+    <div style={box}>
+      <div style={card}>
+        <h1 style={{ margin: "0 0 6px", fontSize: "1.4rem" }}>Forgot password</h1>
+        <p style={{ margin: "0 0 20px", color: "#64748b", fontSize: "0.9rem" }}>
+          Step {step} of 3
+        </p>
 
-          <label className="login-label">Email</label>
-          <div className="login-input-wrap">
+        {/* ——— STEP 1 : EMAIL ——— */}
+        {step === 1 && (
+          <form onSubmit={handleEmailNext}>
+            <label style={{ fontWeight: 600, fontSize: "0.85rem" }}>Email</label>
             <input
               type="email"
-              placeholder="you@company.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@tentee.com"
               required
+              style={inputStyle}
+              autoFocus
             />
-          </div>
+            {error && <p style={{ color: "#dc2626", fontSize: "0.9rem" }}>{error}</p>}
+            <button type="submit" className="btn btn-solid" disabled={loading} style={{ width: "100%" }}>
+              {loading ? "Sending…" : "Next"}
+            </button>
+          </form>
+        )}
 
-          {error && (
-            <div style={{ color: "#ef4444", marginBottom: 12, fontSize: 14 }}>{error}</div>
-          )}
-          {message && (
-            <div style={{ color: "#16a34a", marginBottom: 12, fontSize: 14 }}>{message}</div>
-          )}
-          {resetLink && (
-            <div style={{ marginBottom: 12, fontSize: 13, wordBreak: "break-all" }}>
-              <strong>Dev reset link:</strong>
+        {/* ——— STEP 2 : CODE ——— */}
+        {step === 2 && (
+          <form onSubmit={handleCodeNext}>
+            <p style={{ color: "#64748b", fontSize: "0.9rem", marginBottom: 12 }}>
+              We sent a 6-digit code for <b>{email}</b>.
               <br />
-              <a href={resetLink}>{resetLink}</a>
-            </div>
-          )}
+              (In dev mode, the code is in the backend terminal.)
+            </p>
+            <label style={{ fontWeight: 600, fontSize: "0.85rem" }}>Code</label>
+            <input
+              type="text"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="123456"
+              maxLength={6}
+              required
+              style={inputStyle}
+              autoFocus
+            />
+            {info && <p style={{ color: "#16a34a", fontSize: "0.85rem" }}>{info}</p>}
+            {error && <p style={{ color: "#dc2626", fontSize: "0.9rem" }}>{error}</p>}
 
-          <button type="submit" className="login-submit-btn" disabled={loading}>
-            {loading ? "Sending…" : "Send reset link"}
-          </button>
+            <button type="submit" className="btn btn-solid" disabled={loading} style={{ width: "100%" }}>
+              {loading ? "Checking…" : "Next"}
+            </button>
 
-          <p className="login-footer-note">
-            <a
-              href="/login"
-              onClick={(e) => {
-                e.preventDefault();
-                navigate("/login");
-              }}
-            >
-              ← Back to Sign In
-            </a>
-          </p>
-        </form>
+            <p style={{ marginTop: 14, fontSize: "0.85rem", color: "#64748b", textAlign: "center" }}>
+              {cooldown > 0 ? (
+                <>Wait {formatTime(cooldown)} before requesting a new code</>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={loading}
+                  style={{
+                    border: "none",
+                    background: "none",
+                    color: "#2563eb",
+                    cursor: "pointer",
+                    textDecoration: "underline",
+                  }}
+                >
+                  Resend code
+                </button>
+              )}
+            </p>
+          </form>
+        )}
+
+        {/* ——— STEP 3 : NEW PASSWORD ——— */}
+        {step === 3 && (
+          <form onSubmit={handleUpdatePassword}>
+            <label style={{ fontWeight: 600, fontSize: "0.85rem" }}>New password</label>
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+              style={inputStyle}
+              autoFocus
+            />
+            <label style={{ fontWeight: 600, fontSize: "0.85rem" }}>Confirm password</label>
+            <input
+              type="password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              required
+              style={inputStyle}
+            />
+            {error && <p style={{ color: "#dc2626", fontSize: "0.9rem" }}>{error}</p>}
+            {info && <p style={{ color: "#16a34a", fontSize: "0.9rem" }}>{info}</p>}
+            <button type="submit" className="btn btn-solid" disabled={loading} style={{ width: "100%" }}>
+              {loading ? "Updating…" : "Update password"}
+            </button>
+          </form>
+        )}
+
+        <p style={{ marginTop: 20, textAlign: "center" }}>
+          <Link to="/login" style={{ color: "#2563eb" }}>
+            Back to login
+          </Link>
+        </p>
       </div>
     </div>
   );
