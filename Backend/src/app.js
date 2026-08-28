@@ -15,7 +15,8 @@ const app = express();
 
 app.use(
   cors({
-    origin: process.env.FRONTEND_ORIGIN, // e.g. http://localhost:5173 — never "*" once real users exist
+    origin: true,
+    credentials: true,
   })
 );
 app.use(express.json());
@@ -39,4 +40,5 @@ app.use("/api/activity", activityRoutes);
 app.use("/api/favorites", favoritesRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/notifications", notificationsRoutes);
+
 export default app;

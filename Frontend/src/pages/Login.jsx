@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Login.css";
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+
 export default function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
@@ -17,7 +19,7 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:4000/api/auth/login", {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -31,12 +33,10 @@ export default function Login() {
         return;
       }
 
-      // Sauvegarder le token et les infos utilisateur
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
 
-      // Redirection selon mustChangePassword
-      if (data.mustChangePassword) {
+      if (data.user?.mustChangePassword || data.mustChangePassword) {
         navigate("/change-password");
       } else {
         navigate("/admin/dashboard");
@@ -142,7 +142,7 @@ export default function Login() {
             <button
               type="button"
               className="forgot-password-link"
-             onClick={() => navigate("/forgot-password")}
+              onClick={() => navigate("/forgot-password")}
             >
               Forgot password?
             </button>
@@ -209,4 +209,4 @@ function EyeIcon({ off }) {
       <circle cx="12" cy="12" r="3" />
     </svg>
   );
-} 
+}
