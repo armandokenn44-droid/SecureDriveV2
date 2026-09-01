@@ -1,6 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 
-import Splash from "./pages/Splash.jsx";
 import Login from "./pages/Login.jsx";
 import ChangePassword from "./pages/ChangePassword.jsx";
 import AdminLayout from "./pages/AdminLayout.jsx";
@@ -23,7 +22,7 @@ export default function App() {
   return (
     <div className="app-root">
       <Routes>
-        <Route path="/" element={<Splash />} />
+        <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
         <Route path="/change-password" element={<ChangePassword />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
