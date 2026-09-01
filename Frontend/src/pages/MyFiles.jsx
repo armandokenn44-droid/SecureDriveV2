@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { useOutletContext } from "react-router-dom";
-import FilePreviewModal from "../components/FilePreviewModal.jsx";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
@@ -64,16 +63,15 @@ export default function MyFiles() {
   const [favoriteKeys, setFavoriteKeys] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [previewFile, setPreviewFile] = useState(null);
 
   const [folderModal, setFolderModal] = useState(false);
   const [folderName, setFolderName] = useState("");
   const [creating, setCreating] = useState(false);
 
-  const [menuOpen, setMenuOpen] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(null); // string key
   const [confirm, setConfirm] = useState(null);
   const [moveModal, setMoveModal] = useState(null);
-  const [shareModal, setShareModal] = useState(null); // file
+  const [shareModal, setShareModal] = useState(null);
   const [shareEmail, setShareEmail] = useState("");
   const [sharePermission, setSharePermission] = useState("Read Only");
   const [sharing, setSharing] = useState(false);
@@ -99,9 +97,7 @@ export default function MyFiles() {
       });
       if (!res.ok) return;
       const data = await res.json();
-      const keys = new Set(
-        (data.favorites || []).map((f) => f.file_key || f.key)
-      );
+      const keys = new Set((data.favorites || []).map((f) => f.file_key || f.key));
       setFavoriteKeys(keys);
     } catch {
       /* ignore */
@@ -159,8 +155,8 @@ export default function MyFiles() {
         setMenuOpen(null);
       }
     }
-    document.addEventListener("click", onDocClick);
-    return () => document.removeEventListener("click", onDocClick);
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
   function openFolder(folderKey) {
@@ -244,6 +240,34 @@ export default function MyFiles() {
     }
   }
 
+  /** Preview → nouvel onglet (plus de modal) */
+  async function handlePreview(file) {
+    setMenuOpen(null);
+    const token = localStorage.getItem("token");
+    if (!token || !file?.key) return;
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/files/download?key=${encodeURIComponent(file.key)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.error || "Preview failed", "error");
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const win = window.open(url, "_blank", "noopener,noreferrer");
+      if (!win) {
+        showToast("Popup blocked — allow popups for preview", "error");
+      }
+      // révoquer plus tard pour ne pas casser l’onglet trop tôt
+      setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+    } catch {
+      showToast("Cannot connect to server", "error");
+    }
+  }
+
   function requestDownload(file) {
     setMenuOpen(null);
     setConfirm({
@@ -282,18 +306,20 @@ export default function MyFiles() {
     }
   }
 
-  function requestTrash(file) {
+  function requestTrash(item, isFolder = false) {
     setMenuOpen(null);
     setConfirm({
-      title: "Move to trash?",
-      message: `"${file.name}" will be moved to Trash. You can restore it later.`,
-      confirmLabel: "Move to trash",
+      title: isFolder ? "Delete folder?" : "Move to trash?",
+      message: isFolder
+        ? `"${item.name}" will be moved to Trash (if supported) or deleted.`
+        : `"${item.name}" will be moved to Trash. You can restore it later.`,
+      confirmLabel: isFolder ? "Delete" : "Move to trash",
       danger: true,
-      onConfirm: () => doTrash(file),
+      onConfirm: () => doTrash(item),
     });
   }
 
-  async function doTrash(file) {
+  async function doTrash(item) {
     const token = localStorage.getItem("token");
     try {
       const res = await fetch(`${API_BASE}/api/files/trash`, {
@@ -302,14 +328,14 @@ export default function MyFiles() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ key: file.key }),
+        body: JSON.stringify({ key: item.key }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         showToast(data.error || "Could not move to trash", "error");
         return;
       }
-      showToast(`"${file.name}" moved to trash`);
+      showToast(`"${item.name}" moved to trash`);
       load(path);
     } catch {
       showToast("Cannot connect to server", "error");
@@ -449,6 +475,81 @@ export default function MyFiles() {
     moveDestinations.push({ key: f.key, name: `📁 ${f.name}` });
   });
 
+  function renderMenu(item, { isFolder }) {
+    const isOpen = menuOpen === item.key;
+    return (
+      <div
+        ref={isOpen ? menuRef : null}
+        style={{ position: "relative", display: "inline-block" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          title="More"
+          onClick={(e) => {
+            e.stopPropagation();
+            setMenuOpen(isOpen ? null : item.key);
+          }}
+          style={{
+            border: "none",
+            background: "transparent",
+            cursor: "pointer",
+            fontSize: 18,
+            padding: "4px 10px",
+            lineHeight: 1,
+          }}
+        >
+          ⋮
+        </button>
+        {isOpen && (
+          <div
+            style={{
+              position: "absolute",
+              right: 0,
+              top: "100%",
+              marginTop: 4,
+              background: "#fff",
+              border: "1px solid #e2e8f0",
+              borderRadius: 10,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
+              minWidth: 200,
+              zIndex: 50,
+              padding: 6,
+              textAlign: "left",
+            }}
+          >
+            {!isFolder && canPreview(item.name) && (
+              <MenuItem label="Preview" onClick={() => handlePreview(item)} />
+            )}
+            {!isFolder && (
+              <MenuItem label="Download" onClick={() => requestDownload(item)} />
+            )}
+            {!isFolder && (
+              <MenuItem
+                label={favoriteKeys.has(item.key) ? "Remove favorite" : "Add to favorites"}
+                onClick={() => toggleFavorite(item)}
+              />
+            )}
+            {!isFolder && (
+              <MenuItem label="Share…" onClick={() => openShareModal(item)} />
+            )}
+            {!isFolder && (
+              <MenuItem label="Move to folder…" onClick={() => openMoveModal(item)} />
+            )}
+            {isFolder && (
+              <MenuItem label="Open" onClick={() => openFolder(item.key)} />
+            )}
+            <MenuItem
+              label={isFolder ? "Delete folder" : "Move to trash"}
+              danger
+              onClick={() => requestTrash(item, isFolder)}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div>
       <div
@@ -495,7 +596,11 @@ export default function MyFiles() {
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <input ref={uploadInputRef} type="file" hidden onChange={handleUploadHere} />
-          <button className="btn btn-outline" type="button" onClick={() => uploadInputRef.current?.click()}>
+          <button
+            className="btn btn-outline"
+            type="button"
+            onClick={() => uploadInputRef.current?.click()}
+          >
             Upload here
           </button>
           <button className="btn btn-solid" type="button" onClick={() => setFolderModal(true)}>
@@ -571,6 +676,7 @@ export default function MyFiles() {
                   <td
                     style={{ fontWeight: 600, cursor: "pointer" }}
                     onClick={() => openFolder(folder.key)}
+                    onDoubleClick={() => openFolder(folder.key)}
                   >
                     <span style={{ marginRight: 8 }}>📁</span>
                     {folder.name}
@@ -578,13 +684,7 @@ export default function MyFiles() {
                   <td>—</td>
                   <td>—</td>
                   <td style={{ textAlign: "right" }}>
-                    <button
-                      className="btn btn-outline"
-                      style={{ padding: "4px 10px", fontSize: "0.8rem" }}
-                      onClick={() => openFolder(folder.key)}
-                    >
-                      Open
-                    </button>
+                    {renderMenu(folder, { isFolder: true })}
                   </td>
                 </tr>
               ))}
@@ -600,62 +700,8 @@ export default function MyFiles() {
                   </td>
                   <td>{formatSize(f.size)}</td>
                   <td>{formatDate(f.lastModified)}</td>
-                  <td style={{ textAlign: "right", position: "relative" }}>
-                    <div ref={menuOpen === f.key ? menuRef : null} style={{ display: "inline-block" }}>
-                      <button
-                        type="button"
-                        title="More"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMenuOpen(menuOpen === f.key ? null : f.key);
-                        }}
-                        style={{
-                          border: "none",
-                          background: "transparent",
-                          cursor: "pointer",
-                          fontSize: 18,
-                          padding: "4px 10px",
-                          lineHeight: 1,
-                        }}
-                      >
-                        ⋮
-                      </button>
-                      {menuOpen === f.key && (
-                        <div
-                          style={{
-                            position: "absolute",
-                            right: 0,
-                            top: "100%",
-                            background: "#fff",
-                            border: "1px solid #e2e8f0",
-                            borderRadius: 10,
-                            boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
-                            minWidth: 200,
-                            zIndex: 50,
-                            padding: 6,
-                            textAlign: "left",
-                          }}
-                        >
-                          {canPreview(f.name) && (
-                            <MenuItem
-                              label="Preview"
-                              onClick={() => {
-                                setMenuOpen(null);
-                                setPreviewFile({ key: f.key, name: f.name });
-                              }}
-                            />
-                          )}
-                          <MenuItem label="Download" onClick={() => requestDownload(f)} />
-                          <MenuItem
-                            label={favoriteKeys.has(f.key) ? "Remove favorite" : "Add to favorites"}
-                            onClick={() => toggleFavorite(f)}
-                          />
-                          <MenuItem label="Share…" onClick={() => openShareModal(f)} />
-                          <MenuItem label="Move to folder…" onClick={() => openMoveModal(f)} />
-                          <MenuItem label="Move to trash" danger onClick={() => requestTrash(f)} />
-                        </div>
-                      )}
-                    </div>
+                  <td style={{ textAlign: "right" }}>
+                    {renderMenu(f, { isFolder: false })}
                   </td>
                 </tr>
               ))}
@@ -792,14 +838,6 @@ export default function MyFiles() {
             </button>
           </div>
         </Modal>
-      )}
-
-      {previewFile && (
-        <FilePreviewModal
-          fileKey={previewFile.key}
-          fileName={previewFile.name}
-          onClose={() => setPreviewFile(null)}
-        />
       )}
     </div>
   );
