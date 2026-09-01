@@ -48,12 +48,10 @@ function buildDisplayUser(rawUser) {
   };
 }
 
-// Transforme un objet S3 en format que l'interface attend
 function mapS3File(item) {
   const rawName = item.key.includes("/") ? item.key.split("/").pop() : item.key;
   if (!rawName) return null;
 
-  // Enlève le UUID du début (ex: 151d0e1e-d203-...-test.docx → test.docx)
   const name = rawName.replace(
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-/i,
     ""
@@ -81,7 +79,7 @@ function mapS3File(item) {
 
   return {
     id: item.key,
-    name: name || rawName, // si le regex ne match pas, on garde le nom brut
+    name: name || rawName,
     type,
     size,
     modified,
@@ -89,6 +87,7 @@ function mapS3File(item) {
     fileKey: item.key,
   };
 }
+
 export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -97,8 +96,13 @@ export default function AdminLayout() {
   const [files, setFiles] = useState([]);
   const [filesLoading, setFilesLoading] = useState(true);
   const [user, setUser] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Charger l'utilisateur connecté
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
   useEffect(() => {
     const token = localStorage.getItem("token");
     const rawUser = localStorage.getItem("user");
@@ -116,7 +120,6 @@ export default function AdminLayout() {
     }
   }, [navigate]);
 
-  // Charger les vrais fichiers depuis S3
   useEffect(() => {
     async function loadFiles() {
       setFilesLoading(true);
@@ -145,7 +148,12 @@ export default function AdminLayout() {
     document.body.classList.toggle("dark-mode", darkMode);
   }, [darkMode]);
 
-  const meta = PAGE_META[location.pathname] || { title: "SecureDrive", breadcrumbs: [], upload: false };
+  const meta =
+    PAGE_META[location.pathname] || {
+      title: "SecureDrive",
+      breadcrumbs: [],
+      upload: false,
+    };
 
   function addFile(file) {
     setFiles((prev) => [file, ...prev]);
@@ -154,8 +162,15 @@ export default function AdminLayout() {
   if (!user) return null;
 
   return (
-    <div className="admin-shell">
-      <Sidebar user={user} />
+    <div className={`admin-shell${sidebarOpen ? " sidebar-open" : ""}`}>
+      <div
+        className="sidebar-overlay"
+        onClick={() => setSidebarOpen(false)}
+        aria-hidden={!sidebarOpen}
+      />
+
+      <Sidebar user={user} onNavigate={() => setSidebarOpen(false)} />
+
       <div className="admin-main">
         <Topbar
           title={meta.title}
@@ -164,9 +179,10 @@ export default function AdminLayout() {
           darkMode={darkMode}
           onToggleDarkMode={() => setDarkMode((d) => !d)}
           onUploadClick={meta.upload ? () => setUploadOpen(true) : null}
+          onMenuClick={() => setSidebarOpen((v) => !v)}
         />
         <div className="admin-content">
-          <Outlet context={{ user, files, addFile, filesLoading }} />
+          <Outlet context={{ user, files, addFile, filesLoading, setFiles }} />
         </div>
       </div>
 

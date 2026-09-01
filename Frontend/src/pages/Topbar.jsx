@@ -19,6 +19,7 @@ export default function Topbar({
   darkMode,
   onToggleDarkMode,
   onUploadClick,
+  onMenuClick,
 }) {
   const navigate = useNavigate();
   const [q, setQ] = useState("");
@@ -130,6 +131,21 @@ export default function Topbar({
   return (
     <header className="topbar">
       <div className="topbar-left">
+        {onMenuClick && (
+          <button
+            type="button"
+            className="icon-btn mobile-menu-btn"
+            aria-label="Open menu"
+            onClick={onMenuClick}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <circle cx="12" cy="5" r="2" />
+              <circle cx="12" cy="12" r="2" />
+              <circle cx="12" cy="19" r="2" />
+            </svg>
+          </button>
+        )}
+
         {breadcrumbs.length > 0 && (
           <div className="breadcrumb">
             {breadcrumbs.map((crumb, i) => (
@@ -183,34 +199,19 @@ export default function Topbar({
             )}
             {!searchLoading &&
               results.folders.map((f) => (
-                <button
-                  key={f.key}
-                  type="button"
-                  onClick={goFiles}
-                  style={resultRow}
-                >
+                <button key={f.key} type="button" onClick={goFiles} style={resultRow}>
                   📁 {f.name}
                 </button>
               ))}
             {!searchLoading &&
               results.files.map((f) => (
-                <button
-                  key={f.key}
-                  type="button"
-                  onClick={goFiles}
-                  style={resultRow}
-                >
+                <button key={f.key} type="button" onClick={goFiles} style={resultRow}>
                   📄 {f.name}
                 </button>
               ))}
             {!searchLoading &&
               results.users.map((u) => (
-                <button
-                  key={u.id}
-                  type="button"
-                  onClick={goUsers}
-                  style={resultRow}
-                >
+                <button key={u.id} type="button" onClick={goUsers} style={resultRow}>
                   👤 {u.name} · {u.email}
                 </button>
               ))}
@@ -253,6 +254,7 @@ export default function Topbar({
                 top: 42,
                 right: 0,
                 width: 300,
+                maxWidth: "calc(100vw - 24px)",
                 background: "var(--bg-surface)",
                 border: "1px solid var(--border-color)",
                 borderRadius: 12,
@@ -305,7 +307,10 @@ export default function Topbar({
         </div>
 
         <div className="topbar-user" onClick={() => navigate("/admin/profile")}>
-          <div className="avatar-circle" style={{ background: user?.avatarColor || "#2563eb" }}>
+          <div
+            className="avatar-circle"
+            style={{ background: user?.avatarColor || "#2563eb" }}
+          >
             {user?.initials || "U"}
           </div>
           <div>

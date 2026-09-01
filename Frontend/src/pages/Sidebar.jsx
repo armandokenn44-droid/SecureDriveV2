@@ -17,10 +17,14 @@ const ADMIN_NAV = [
   { to: "settings", label: "System Settings", icon: SettingsIcon, roles: [ROLES.SUPER_ADMIN] },
 ];
 
-export default function Sidebar({ user }) {
+export default function Sidebar({ user, onNavigate }) {
   const navigate = useNavigate();
   const adminItems = ADMIN_NAV.filter((item) => item.roles.includes(user.role));
-  const storagePct = Math.round((user.storageUsedGB / user.storageTotalGB) * 100);
+  const storagePct = Math.round((user.storageUsedGB / user.storageTotalGB) * 100) || 0;
+
+  function handleNav() {
+    onNavigate?.();
+  }
 
   return (
     <aside className="sidebar">
@@ -40,6 +44,7 @@ export default function Sidebar({ user }) {
             key={item.to}
             to={`/admin/${item.to}`}
             className={({ isActive }) => `sidebar-link${isActive ? " active" : ""}`}
+            onClick={handleNav}
           >
             <item.icon /> {item.label}
           </NavLink>
@@ -55,6 +60,7 @@ export default function Sidebar({ user }) {
                 key={item.to}
                 to={`/admin/${item.to}`}
                 className={({ isActive }) => `sidebar-link${isActive ? " active" : ""}`}
+                onClick={handleNav}
               >
                 <item.icon /> {item.label}
               </NavLink>
@@ -69,14 +75,22 @@ export default function Sidebar({ user }) {
         <div className="sidebar-storage-card">
           <div className="sidebar-storage-top">
             <span>Storage</span>
-            <span>{user.storageUsedGB} / {user.storageTotalGB} GB</span>
+            <span>
+              {user.storageUsedGB} / {user.storageTotalGB} GB
+            </span>
           </div>
           <div className="sidebar-storage-track">
             <div className="sidebar-storage-fill" style={{ width: `${storagePct}%` }} />
           </div>
         </div>
 
-        <div className="sidebar-user-card" onClick={() => navigate("/admin/profile")}>
+        <div
+          className="sidebar-user-card"
+          onClick={() => {
+            handleNav();
+            navigate("/admin/profile");
+          }}
+        >
           <div className="avatar-circle" style={{ background: user.avatarColor }}>
             {user.initials}
           </div>
@@ -100,13 +114,85 @@ function ShieldIcon() {
 function iconProps() {
   return { width: 17, height: 17, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 };
 }
-function GridIcon() { return <svg {...iconProps()}><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>; }
-function FolderIcon() { return <svg {...iconProps()}><path d="M3 6a1 1 0 011-1h5l2 2h9a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V6z"/></svg>; }
-function ShareIcon() { return <svg {...iconProps()}><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8L15.8 7.2M8.2 13.2l7.6 3.6"/></svg>; }
-function SendIcon() { return <svg {...iconProps()}><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>; }
-function ClockIcon() { return <svg {...iconProps()}><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>; }
-function StarIcon() { return <svg {...iconProps()}><path d="M12 2l3.1 6.6 7.2.8-5.4 5 1.5 7.1L12 18.1 5.6 21.5l1.5-7.1-5.4-5 7.2-.8L12 2z"/></svg>; }
-function TrashIcon() { return <svg {...iconProps()}><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13"/></svg>; }
-function UsersIcon() { return <svg {...iconProps()}><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><circle cx="17.5" cy="9" r="2.6"/><path d="M15 14.2c2.6.4 4.5 2.3 4.5 5.3"/></svg>; }
-function ActivityIcon() { return <svg {...iconProps()}><path d="M3 12h4l2 8 4-16 2 8h6"/></svg>; }
-function SettingsIcon() { return <svg {...iconProps()}><circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a7.6 7.6 0 000-3l2-1.5-2-3.5-2.4 1a7.7 7.7 0 00-2.6-1.5L14 2h-4l-.4 2.5a7.7 7.7 0 00-2.6 1.5l-2.4-1-2 3.5 2 1.5a7.6 7.6 0 000 3l-2 1.5 2 3.5 2.4-1a7.7 7.7 0 002.6 1.5L10 22h4l.4-2.5a7.7 7.7 0 002.6-1.5l2.4 1 2-3.5-2-1.5z"/></svg>; }
+function GridIcon() {
+  return (
+    <svg {...iconProps()}>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+    </svg>
+  );
+}
+function FolderIcon() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M3 6a1 1 0 011-1h5l2 2h9a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V6z" />
+    </svg>
+  );
+}
+function ShareIcon() {
+  return (
+    <svg {...iconProps()}>
+      <circle cx="6" cy="12" r="2.5" />
+      <circle cx="18" cy="6" r="2.5" />
+      <circle cx="18" cy="18" r="2.5" />
+      <path d="M8.2 10.8L15.8 7.2M8.2 13.2l7.6 3.6" />
+    </svg>
+  );
+}
+function SendIcon() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M22 2L11 13" />
+      <path d="M22 2l-7 20-4-9-9-4 20-7z" />
+    </svg>
+  );
+}
+function ClockIcon() {
+  return (
+    <svg {...iconProps()}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 3" />
+    </svg>
+  );
+}
+function StarIcon() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M12 2l3.1 6.6 7.2.8-5.4 5 1.5 7.1L12 18.1 5.6 21.5l1.5-7.1-5.4-5 7.2-.8L12 2z" />
+    </svg>
+  );
+}
+function TrashIcon() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" />
+    </svg>
+  );
+}
+function UsersIcon() {
+  return (
+    <svg {...iconProps()}>
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6" />
+      <circle cx="17.5" cy="9" r="2.6" />
+      <path d="M15 14.2c2.6.4 4.5 2.3 4.5 5.3" />
+    </svg>
+  );
+}
+function ActivityIcon() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M3 12h4l2 8 4-16 2 8h6" />
+    </svg>
+  );
+}
+function SettingsIcon() {
+  return (
+    <svg {...iconProps()}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 13.5a7.6 7.6 0 000-3l2-1.5-2-3.5-2.4 1a7.7 7.7 0 00-2.6-1.5L14 2h-4l-.4 2.5a7.7 7.7 0 00-2.6 1.5l-2.4-1-2 3.5 2 1.5a7.6 7.6 0 000 3l-2 1.5 2 3.5 2.4-1a7.7 7.7 0 002.6 1.5L10 22h4l.4-2.5a7.7 7.7 0 002.6-1.5l2.4 1 2-3.5-2-1.5z" />
+    </svg>
+  );
+}
