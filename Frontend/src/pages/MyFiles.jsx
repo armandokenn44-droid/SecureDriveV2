@@ -68,7 +68,8 @@ export default function MyFiles() {
   const [folderName, setFolderName] = useState("");
   const [creating, setCreating] = useState(false);
 
-  const [menuOpen, setMenuOpen] = useState(null); // string key
+  // menu: { key, isFolder, item, top, left }
+  const [menu, setMenu] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [moveModal, setMoveModal] = useState(null);
   const [shareModal, setShareModal] = useState(null);
@@ -78,15 +79,13 @@ export default function MyFiles() {
   const [toasts, setToasts] = useState([]);
 
   const uploadInputRef = useRef(null);
-  const menuRef = useRef(null);
+  const menuPanelRef = useRef(null);
 
   function showToast(message, type = "ok") {
     // eslint-disable-next-line react-hooks/purity
     const id = Date.now() + Math.random();
     setToasts((t) => [...t, { id, message, type }]);
-    setTimeout(() => {
-      setToasts((t) => t.filter((x) => x.id !== id));
-    }, 5000);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 5000);
   }
 
   async function loadFavorites() {
@@ -97,8 +96,7 @@ export default function MyFiles() {
       });
       if (!res.ok) return;
       const data = await res.json();
-      const keys = new Set((data.favorites || []).map((f) => f.file_key || f.key));
-      setFavoriteKeys(keys);
+      setFavoriteKeys(new Set((data.favorites || []).map((f) => f.file_key || f.key)));
     } catch {
       /* ignore */
     }
@@ -150,17 +148,54 @@ export default function MyFiles() {
   }, [user?.userId || user?.id]);
 
   useEffect(() => {
-    function onDocClick(e) {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setMenuOpen(null);
+    function onDoc(e) {
+      if (menuPanelRef.current && !menuPanelRef.current.contains(e.target)) {
+        // ignore clicks on ⋮ buttons (they toggle)
+        if (e.target.closest?.("[data-menu-btn]")) return;
+        setMenu(null);
       }
     }
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    function onScroll() {
+      setMenu(null);
+    }
+    document.addEventListener("mousedown", onDoc);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
   }, []);
 
+  function openMenu(e, item, isFolder) {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const menuWidth = 210;
+    const gap = 4;
+    let left = rect.right - menuWidth;
+    if (left < 8) left = 8;
+    if (left + menuWidth > window.innerWidth - 8) {
+      left = window.innerWidth - menuWidth - 8;
+    }
+    let top = rect.bottom + gap;
+    // si trop bas, ouvrir vers le haut
+    const estimatedHeight = isFolder ? 180 : 280;
+    if (top + estimatedHeight > window.innerHeight - 8) {
+      top = Math.max(8, rect.top - estimatedHeight - gap);
+    }
+    setMenu({
+      key: item.key,
+      isFolder,
+      item,
+      top,
+      left,
+    });
+  }
+
   function openFolder(folderKey) {
-    setMenuOpen(null);
+    setMenu(null);
     setPath(folderKey);
     load(folderKey);
   }
@@ -240,9 +275,8 @@ export default function MyFiles() {
     }
   }
 
-  /** Preview → nouvel onglet (plus de modal) */
   async function handlePreview(file) {
-    setMenuOpen(null);
+    setMenu(null);
     const token = localStorage.getItem("token");
     if (!token || !file?.key) return;
     try {
@@ -258,10 +292,7 @@ export default function MyFiles() {
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const win = window.open(url, "_blank", "noopener,noreferrer");
-      if (!win) {
-        showToast("Popup blocked — allow popups for preview", "error");
-      }
-      // révoquer plus tard pour ne pas casser l’onglet trop tôt
+      if (!win) showToast("Popup blocked — allow popups", "error");
       setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
     } catch {
       showToast("Cannot connect to server", "error");
@@ -269,10 +300,10 @@ export default function MyFiles() {
   }
 
   function requestDownload(file) {
-    setMenuOpen(null);
+    setMenu(null);
     setConfirm({
-      title: "Download file?",
-      message: `Download "${file.name}" to your computer?`,
+      title: "Download?",
+      message: `Download "${file.name}"?`,
       confirmLabel: "Download",
       danger: false,
       onConfirm: () => doDownload(file),
@@ -306,12 +337,12 @@ export default function MyFiles() {
     }
   }
 
-  function requestTrash(item, isFolder = false) {
-    setMenuOpen(null);
+  function requestTrash(item, isFolder) {
+    setMenu(null);
     setConfirm({
       title: isFolder ? "Delete folder?" : "Move to trash?",
       message: isFolder
-        ? `"${item.name}" will be moved to Trash (if supported) or deleted.`
+        ? `"${item.name}" will be moved to trash.`
         : `"${item.name}" will be moved to Trash. You can restore it later.`,
       confirmLabel: isFolder ? "Delete" : "Move to trash",
       danger: true,
@@ -343,7 +374,7 @@ export default function MyFiles() {
   }
 
   async function toggleFavorite(file) {
-    setMenuOpen(null);
+    setMenu(null);
     const token = localStorage.getItem("token");
     const isFav = favoriteKeys.has(file.key);
     try {
@@ -354,9 +385,7 @@ export default function MyFiles() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(
-          isFav
-            ? { fileKey: file.key }
-            : { fileKey: file.key, fileName: file.name }
+          isFav ? { fileKey: file.key } : { fileKey: file.key, fileName: file.name }
         ),
       });
       const data = await res.json().catch(() => ({}));
@@ -371,25 +400,23 @@ export default function MyFiles() {
         return next;
       });
       showToast(
-        isFav
-          ? `"${file.name}" removed from favorites`
-          : `"${file.name}" added to favorites`
+        isFav ? `"${file.name}" removed from favorites` : `"${file.name}" added to favorites`
       );
     } catch {
       showToast("Cannot connect to server", "error");
     }
   }
 
-  function openMoveModal(file) {
-    setMenuOpen(null);
-    setMoveModal(file);
+  function openMoveModal(item) {
+    setMenu(null);
+    setMoveModal(item);
   }
 
-  function openShareModal(file) {
-    setMenuOpen(null);
+  function openShareModal(item) {
+    setMenu(null);
     setShareEmail("");
     setSharePermission("Read Only");
-    setShareModal(file);
+    setShareModal(item);
   }
 
   async function handleShare(e) {
@@ -418,7 +445,6 @@ export default function MyFiles() {
       }
       showToast(`"${shareModal.name}" shared with ${shareEmail.trim()}`);
       setShareModal(null);
-      setShareEmail("");
     } catch {
       showToast("Cannot connect to server", "error");
     } finally {
@@ -429,8 +455,8 @@ export default function MyFiles() {
   function doMove(file, destinationPath) {
     setMoveModal(null);
     setConfirm({
-      title: "Move file?",
-      message: `Move "${file.name}" to the selected location?`,
+      title: "Move?",
+      message: `Move "${file.name}"?`,
       confirmLabel: "Move",
       danger: false,
       onConfirm: async () => {
@@ -472,107 +498,130 @@ export default function MyFiles() {
     moveDestinations.push({ key: parent, name: "← Parent folder" });
   }
   folders.forEach((f) => {
-    moveDestinations.push({ key: f.key, name: `📁 ${f.name}` });
+    if (!moveModal || f.key !== moveModal.key) {
+      moveDestinations.push({ key: f.key, name: `📁 ${f.name}` });
+    }
   });
 
-  function renderMenu(item, { isFolder }) {
-    const isOpen = menuOpen === item.key;
-    return (
-      <div
-        ref={isOpen ? menuRef : null}
-        style={{ position: "relative", display: "inline-block" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          type="button"
-          title="More"
-          onClick={(e) => {
-            e.stopPropagation();
-            setMenuOpen(isOpen ? null : item.key);
-          }}
-          style={{
-            border: "none",
-            background: "transparent",
-            cursor: "pointer",
-            fontSize: 18,
-            padding: "4px 10px",
-            lineHeight: 1,
-          }}
-        >
-          ⋮
-        </button>
-        {isOpen && (
-          <div
-            style={{
-              position: "absolute",
-              right: 0,
-              top: "100%",
-              marginTop: 4,
-              background: "#fff",
-              border: "1px solid #e2e8f0",
-              borderRadius: 10,
-              boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
-              minWidth: 200,
-              zIndex: 50,
-              padding: 6,
-              textAlign: "left",
-            }}
-          >
-            {!isFolder && canPreview(item.name) && (
-              <MenuItem label="Preview" onClick={() => handlePreview(item)} />
-            )}
-            {!isFolder && (
-              <MenuItem label="Download" onClick={() => requestDownload(item)} />
-            )}
-            {!isFolder && (
-              <MenuItem
-                label={favoriteKeys.has(item.key) ? "Remove favorite" : "Add to favorites"}
-                onClick={() => toggleFavorite(item)}
-              />
-            )}
-            {!isFolder && (
-              <MenuItem label="Share…" onClick={() => openShareModal(item)} />
-            )}
-            {!isFolder && (
-              <MenuItem label="Move to folder…" onClick={() => openMoveModal(item)} />
-            )}
-            {isFolder && (
-              <MenuItem label="Open" onClick={() => openFolder(item.key)} />
-            )}
-            <MenuItem
-              label={isFolder ? "Delete folder" : "Move to trash"}
-              danger
-              onClick={() => requestTrash(item, isFolder)}
-            />
-          </div>
-        )}
-      </div>
-    );
-  }
-
   return (
-    <div>
+    <div className="myfiles-page">
+      <style>{`
+        .myfiles-page { width: 100%; max-width: 100%; }
+        .myfiles-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+          flex-wrap: wrap;
+          margin-bottom: 8px;
+        }
+        .myfiles-actions {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        .myfiles-breadcrumb {
+          margin: 12px 0 16px;
+          font-size: 0.9rem;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex-wrap: wrap;
+        }
+        .myfiles-table-wrap {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+        .myfiles-table-wrap .data-table {
+          min-width: 520px;
+        }
+        .myfiles-table-wrap .data-table td:last-child,
+        .myfiles-table-wrap .data-table th:last-child {
+          width: 56px;
+          text-align: right;
+        }
+        .menu-floating {
+          position: fixed;
+          z-index: 10050;
+          background: #fff;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          box-shadow: 0 12px 40px rgba(15,23,42,0.18);
+          min-width: 200px;
+          padding: 6px;
+          text-align: left;
+        }
+        .menu-floating button {
+          display: block;
+          width: 100%;
+          text-align: left;
+          padding: 11px 14px;
+          border: none;
+          background: transparent;
+          border-radius: 8px;
+          cursor: pointer;
+          font-size: 0.9rem;
+          color: #0f172a;
+        }
+        .menu-floating button:hover { background: #f1f5f9; }
+        .menu-floating button.danger { color: #dc2626; }
+        @media (max-width: 768px) {
+          .myfiles-header {
+            flex-direction: column;
+            align-items: stretch;
+          }
+          .myfiles-actions {
+            width: 100%;
+          }
+          .myfiles-actions .btn {
+            flex: 1;
+            justify-content: center;
+            min-height: 42px;
+          }
+          .page-heading { font-size: 1.35rem !important; }
+          .page-subtext { font-size: 0.85rem; }
+          .myfiles-table-wrap .data-table {
+            min-width: 100%;
+            font-size: 0.85rem;
+          }
+          .myfiles-table-wrap .data-table th:nth-child(2),
+          .myfiles-table-wrap .data-table td:nth-child(2),
+          .myfiles-table-wrap .data-table th:nth-child(3),
+          .myfiles-table-wrap .data-table td:nth-child(3) {
+            display: none;
+          }
+          .menu-floating {
+            min-width: min(240px, calc(100vw - 24px));
+          }
+        }
+      `}</style>
+
+      {/* Toasts */}
       <div
         style={{
           position: "fixed",
           bottom: 24,
-          right: 24,
-          zIndex: 10000,
+          right: 16,
+          left: 16,
+          zIndex: 10060,
           display: "flex",
           flexDirection: "column",
           gap: 8,
-          maxWidth: 360,
+          alignItems: "flex-end",
+          pointerEvents: "none",
         }}
       >
         {toasts.map((t) => (
           <div
             key={t.id}
             style={{
+              pointerEvents: "auto",
               background: t.type === "error" ? "#991b1b" : "#0f172a",
               color: "#fff",
               padding: "12px 16px",
               borderRadius: 10,
               fontSize: "0.9rem",
+              maxWidth: 360,
               boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
             }}
           >
@@ -581,20 +630,12 @@ export default function MyFiles() {
         ))}
       </div>
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
+      <div className="myfiles-header">
         <div>
           <h2 className="page-heading">My Files</h2>
           <p className="page-subtext">Files and folders in your SecureDrive workspace.</p>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className="myfiles-actions">
           <input ref={uploadInputRef} type="file" hidden onChange={handleUploadHere} />
           <button
             className="btn btn-outline"
@@ -609,16 +650,7 @@ export default function MyFiles() {
         </div>
       </div>
 
-      <div
-        style={{
-          margin: "12px 0 16px",
-          fontSize: "0.9rem",
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          flexWrap: "wrap",
-        }}
-      >
+      <div className="myfiles-breadcrumb">
         <button
           type="button"
           className="btn btn-outline"
@@ -640,7 +672,7 @@ export default function MyFiles() {
           <button
             type="button"
             className="btn btn-outline"
-            style={{ padding: "4px 10px", fontSize: "0.8rem", marginLeft: 8 }}
+            style={{ padding: "4px 10px", fontSize: "0.8rem", marginLeft: 4 }}
             onClick={goUp}
           >
             ↑ Up
@@ -652,7 +684,7 @@ export default function MyFiles() {
         <div style={{ color: "#ef4444", marginBottom: 12, fontSize: "0.85rem" }}>{error}</div>
       )}
 
-      <div className="table-card">
+      <div className="table-card myfiles-table-wrap">
         {loading ? (
           <div style={{ padding: 24, textAlign: "center" }}>Loading…</div>
         ) : folders.length === 0 && files.length === 0 ? (
@@ -667,7 +699,7 @@ export default function MyFiles() {
                 <th>Name</th>
                 <th>Size</th>
                 <th>Modified</th>
-                <th style={{ textAlign: "right" }}>Actions</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -683,8 +715,17 @@ export default function MyFiles() {
                   </td>
                   <td>—</td>
                   <td>—</td>
-                  <td style={{ textAlign: "right" }}>
-                    {renderMenu(folder, { isFolder: true })}
+                  <td>
+                    <button
+                      type="button"
+                      data-menu-btn
+                      title="More"
+                      aria-label="More"
+                      onClick={(e) => openMenu(e, folder, true)}
+                      style={dotsBtnStyle}
+                    >
+                      ⋮
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -700,8 +741,17 @@ export default function MyFiles() {
                   </td>
                   <td>{formatSize(f.size)}</td>
                   <td>{formatDate(f.lastModified)}</td>
-                  <td style={{ textAlign: "right" }}>
-                    {renderMenu(f, { isFolder: false })}
+                  <td>
+                    <button
+                      type="button"
+                      data-menu-btn
+                      title="More"
+                      aria-label="More"
+                      onClick={(e) => openMenu(e, f, false)}
+                      style={dotsBtnStyle}
+                    >
+                      ⋮
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -709,6 +759,63 @@ export default function MyFiles() {
           </table>
         )}
       </div>
+
+      {/* Menu flottant (fixed) — juste sous le bouton */}
+      {menu && (
+        <div
+          ref={menuPanelRef}
+          className="menu-floating"
+          style={{ top: menu.top, left: menu.left }}
+        >
+          {menu.isFolder ? (
+            <>
+              <button type="button" onClick={() => openFolder(menu.item.key)}>
+                Open
+              </button>
+              <button type="button" onClick={() => openShareModal(menu.item)}>
+                Share…
+              </button>
+              <button type="button" onClick={() => openMoveModal(menu.item)}>
+                Move…
+              </button>
+              <button
+                type="button"
+                className="danger"
+                onClick={() => requestTrash(menu.item, true)}
+              >
+                Delete folder
+              </button>
+            </>
+          ) : (
+            <>
+              {canPreview(menu.item.name) && (
+                <button type="button" onClick={() => handlePreview(menu.item)}>
+                  Preview
+                </button>
+              )}
+              <button type="button" onClick={() => requestDownload(menu.item)}>
+                Download
+              </button>
+              <button type="button" onClick={() => toggleFavorite(menu.item)}>
+                {favoriteKeys.has(menu.item.key) ? "Remove favorite" : "Add to favorites"}
+              </button>
+              <button type="button" onClick={() => openShareModal(menu.item)}>
+                Share…
+              </button>
+              <button type="button" onClick={() => openMoveModal(menu.item)}>
+                Move to folder…
+              </button>
+              <button
+                type="button"
+                className="danger"
+                onClick={() => requestTrash(menu.item, false)}
+              >
+                Move to trash
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {folderModal && (
         <Modal onClose={() => setFolderModal(false)}>
@@ -740,9 +847,9 @@ export default function MyFiles() {
 
       {shareModal && (
         <Modal onClose={() => setShareModal(null)}>
-          <h3 style={{ margin: "0 0 6px", fontSize: "1.15rem" }}>Share file</h3>
+          <h3 style={{ margin: "0 0 6px", fontSize: "1.15rem" }}>Share</h3>
           <p style={{ margin: "0 0 16px", color: "#64748b", fontSize: "0.9rem" }}>
-            Share <b>{shareModal.name}</b> with a team member.
+            Share <b>{shareModal.name}</b>
           </p>
           <form onSubmit={handleShare}>
             <label style={{ fontSize: "0.85rem", fontWeight: 600 }}>Email</label>
@@ -780,12 +887,12 @@ export default function MyFiles() {
 
       {moveModal && (
         <Modal onClose={() => setMoveModal(null)}>
-          <h3 style={{ margin: "0 0 6px", fontSize: "1.15rem" }}>Move file</h3>
+          <h3 style={{ margin: "0 0 6px", fontSize: "1.15rem" }}>Move</h3>
           <p style={{ margin: "0 0 16px", color: "#64748b", fontSize: "0.9rem" }}>
             Choose where to move <b>{moveModal.name}</b>
           </p>
           {moveDestinations.length === 0 ? (
-            <p style={{ color: "#64748b" }}>No folder available. Create a folder first.</p>
+            <p style={{ color: "#64748b" }}>No folder available.</p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 280, overflowY: "auto" }}>
               {moveDestinations.map((d) => (
@@ -843,35 +950,6 @@ export default function MyFiles() {
   );
 }
 
-function MenuItem({ label, onClick, danger }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        display: "block",
-        width: "100%",
-        textAlign: "left",
-        padding: "10px 12px",
-        border: "none",
-        background: "transparent",
-        borderRadius: 8,
-        cursor: "pointer",
-        fontSize: "0.9rem",
-        color: danger ? "#dc2626" : "#0f172a",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = "#f1f5f9";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = "transparent";
-      }}
-    >
-      {label}
-    </button>
-  );
-}
-
 function Modal({ children, onClose }) {
   return (
     <div
@@ -882,7 +960,7 @@ function Modal({ children, onClose }) {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        zIndex: 9999,
+        zIndex: 10040,
         padding: 16,
       }}
       onClick={onClose}
@@ -903,6 +981,16 @@ function Modal({ children, onClose }) {
     </div>
   );
 }
+
+const dotsBtnStyle = {
+  border: "none",
+  background: "transparent",
+  cursor: "pointer",
+  fontSize: 18,
+  padding: "6px 12px",
+  lineHeight: 1,
+  borderRadius: 8,
+};
 
 const inputStyle = {
   width: "100%",
