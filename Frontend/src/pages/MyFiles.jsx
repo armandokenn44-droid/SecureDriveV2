@@ -67,9 +67,7 @@ export default function MyFiles() {
   const [folderModal, setFolderModal] = useState(false);
   const [folderName, setFolderName] = useState("");
   const [creating, setCreating] = useState(false);
-
-  // menu: { key, isFolder, item, top, left }
-  const [menu, setMenu] = useState(null);
+ const [menu, setMenu] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [moveModal, setMoveModal] = useState(null);
   const [shareModal, setShareModal] = useState(null);
@@ -149,8 +147,7 @@ export default function MyFiles() {
 
   useEffect(() => {
     function onDoc(e) {
-      if (menuPanelRef.current && !menuPanelRef.current.contains(e.target)) {
-        // ignore clicks on ⋮ buttons (they toggle)
+            if (menuPanelRef.current && !menuPanelRef.current.contains(e.target)) {
         if (e.target.closest?.("[data-menu-btn]")) return;
         setMenu(null);
       }
@@ -180,15 +177,14 @@ export default function MyFiles() {
       left = window.innerWidth - menuWidth - 8;
     }
     let top = rect.bottom + gap;
-    // si trop bas, ouvrir vers le haut
-    const estimatedHeight = isFolder ? 180 : 280;
+      const estimatedHeight = isFolder ? 180 : 280;
     if (top + estimatedHeight > window.innerHeight - 8) {
       top = Math.max(8, rect.top - estimatedHeight - gap);
     }
     setMenu({
       key: item.key,
       isFolder,
-      item,
+      item: { ...item, type: isFolder ? "folder" : item.type },
       top,
       left,
     });
@@ -400,7 +396,9 @@ export default function MyFiles() {
         return next;
       });
       showToast(
-        isFav ? `"${file.name}" removed from favorites` : `"${file.name}" added to favorites`
+        isFav
+          ? `"${file.name}" removed from favorites`
+          : `"${file.name}" added to favorites`
       );
     } catch {
       showToast("Cannot connect to server", "error");
@@ -424,6 +422,16 @@ export default function MyFiles() {
     if (!shareModal || !shareEmail.trim()) return;
     setSharing(true);
     const token = localStorage.getItem("token");
+
+    const isFolder =
+      (typeof shareModal.key === "string" && shareModal.key.endsWith("/")) ||
+      shareModal.type === "folder";
+
+    let fileKey = shareModal.key;
+    if (isFolder && fileKey && !fileKey.endsWith("/")) {
+      fileKey = `${fileKey}/`;
+    }
+
     try {
       const res = await fetch(`${API_BASE}/api/shares`, {
         method: "POST",
@@ -432,10 +440,11 @@ export default function MyFiles() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          fileKey: shareModal.key,
+          fileKey,
           fileName: shareModal.name,
           email: shareEmail.trim(),
           permission: sharePermission,
+          isFolder: !!isFolder,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -443,7 +452,11 @@ export default function MyFiles() {
         showToast(data.error || "Share failed", "error");
         return;
       }
-      showToast(`"${shareModal.name}" shared with ${shareEmail.trim()}`);
+      showToast(
+        isFolder
+          ? `Folder "${shareModal.name}" shared with ${shareEmail.trim()}`
+          : `"${shareModal.name}" shared with ${shareEmail.trim()}`
+      );
       setShareModal(null);
     } catch {
       showToast("Cannot connect to server", "error");
@@ -502,6 +515,11 @@ export default function MyFiles() {
       moveDestinations.push({ key: f.key, name: `📁 ${f.name}` });
     }
   });
+
+  const shareIsFolder =
+    shareModal &&
+    ((typeof shareModal.key === "string" && shareModal.key.endsWith("/")) ||
+      shareModal.type === "folder");
 
   return (
     <div className="myfiles-page">
@@ -570,9 +588,7 @@ export default function MyFiles() {
             flex-direction: column;
             align-items: stretch;
           }
-          .myfiles-actions {
-            width: 100%;
-          }
+          .myfiles-actions { width: 100%; }
           .myfiles-actions .btn {
             flex: 1;
             justify-content: center;
@@ -595,8 +611,7 @@ export default function MyFiles() {
           }
         }
       `}</style>
-
-      {/* Toasts */}
+     
       <div
         style={{
           position: "fixed",
@@ -759,8 +774,7 @@ export default function MyFiles() {
           </table>
         )}
       </div>
-
-      {/* Menu flottant (fixed) — juste sous le bouton */}
+      
       {menu && (
         <div
           ref={menuPanelRef}
@@ -837,7 +851,11 @@ export default function MyFiles() {
               <button type="button" className="btn btn-outline" onClick={() => setFolderModal(false)}>
                 Cancel
               </button>
-              <button type="submit" className="btn btn-solid" disabled={creating || !folderName.trim()}>
+              <button
+                type="submit"
+                className="btn btn-solid"
+                disabled={creating || !folderName.trim()}
+              >
                 {creating ? "Creating…" : "Create"}
               </button>
             </div>
@@ -847,9 +865,14 @@ export default function MyFiles() {
 
       {shareModal && (
         <Modal onClose={() => setShareModal(null)}>
-          <h3 style={{ margin: "0 0 6px", fontSize: "1.15rem" }}>Share</h3>
+          <h3 style={{ margin: "0 0 6px", fontSize: "1.15rem" }}>
+            Share {shareIsFolder ? "folder" : "file"}
+          </h3>
           <p style={{ margin: "0 0 16px", color: "#64748b", fontSize: "0.9rem" }}>
             Share <b>{shareModal.name}</b>
+            {shareIsFolder
+              ? " (folder + files inside, according to permission)"
+              : ""}
           </p>
           <form onSubmit={handleShare}>
             <label style={{ fontSize: "0.85rem", fontWeight: 600 }}>Email</label>
@@ -862,7 +885,9 @@ export default function MyFiles() {
               required
               autoFocus
             />
-            <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginTop: 12 }}>
+            <label
+              style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginTop: 12 }}
+            >
               Permission
             </label>
             <select
@@ -877,7 +902,11 @@ export default function MyFiles() {
               <button type="button" className="btn btn-outline" onClick={() => setShareModal(null)}>
                 Cancel
               </button>
-              <button type="submit" className="btn btn-solid" disabled={sharing || !shareEmail.trim()}>
+              <button
+                type="submit"
+                className="btn btn-solid"
+                disabled={sharing || !shareEmail.trim()}
+              >
                 {sharing ? "Sharing…" : "Share"}
               </button>
             </div>
@@ -894,7 +923,15 @@ export default function MyFiles() {
           {moveDestinations.length === 0 ? (
             <p style={{ color: "#64748b" }}>No folder available.</p>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 280, overflowY: "auto" }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+                maxHeight: 280,
+                overflowY: "auto",
+              }}
+            >
               {moveDestinations.map((d) => (
                 <button
                   key={d.key}
@@ -926,7 +963,9 @@ export default function MyFiles() {
       {confirm && (
         <Modal onClose={() => setConfirm(null)}>
           <h3 style={{ margin: "0 0 8px", fontSize: "1.15rem" }}>{confirm.title}</h3>
-          <p style={{ margin: "0 0 20px", color: "#64748b", fontSize: "0.95rem" }}>{confirm.message}</p>
+          <p style={{ margin: "0 0 20px", color: "#64748b", fontSize: "0.95rem" }}>
+            {confirm.message}
+          </p>
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <button type="button" className="btn btn-outline" onClick={() => setConfirm(null)}>
               Cancel
@@ -934,7 +973,11 @@ export default function MyFiles() {
             <button
               type="button"
               className="btn btn-solid"
-              style={confirm.danger ? { background: "#dc2626", borderColor: "#dc2626" } : undefined}
+              style={
+                confirm.danger
+                  ? { background: "#dc2626", borderColor: "#dc2626" }
+                  : undefined
+              }
               onClick={() => {
                 const fn = confirm.onConfirm;
                 setConfirm(null);

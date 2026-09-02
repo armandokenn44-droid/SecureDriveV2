@@ -4,6 +4,7 @@ import multer from "multer";
 import { requireAuth } from "../middleware/auth.middleware.js";
 import { pool } from "../db/pool.js";
 import { logActivity } from "../activity/activity.routes.js";
+import { canAccessKey } from "./access.js";
 import {
   PutObjectCommand,
   ListObjectsV2Command,
@@ -47,23 +48,6 @@ function sanitizeFileName(name) {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
-function canAccessKey(fileKey, user) {
-  const isOwner =
-    fileKey.startsWith(`uploads/${user.userId}/`) ||
-    fileKey.startsWith(`trash/${user.userId}/`);
-  const isSuperAdmin = user.role === "Super Admin";
-  return isOwner || isSuperAdmin;
-}
-
-async function getSharePermission(fileKey, userId) {
-  const result = await pool.query(
-    `SELECT permission FROM shares
-     WHERE file_key = $1 AND shared_with_id = $2`,
-    [fileKey, userId]
-  );
-  return result.rows[0]?.permission || null;
-}
-
 // GET /api/files?path=
 router.get("/", requireAuth, async (req, res) => {
   try {
@@ -71,11 +55,17 @@ router.get("/", requireAuth, async (req, res) => {
     const userId = req.user.userId;
     const isSuperAdmin = req.user.role === "Super Admin";
 
-    let prefix = req.query.path || (isSuperAdmin ? "uploads/" : `uploads/${userId}/`);
-    if (!isSuperAdmin && !prefix.startsWith(`uploads/${userId}/`)) {
-      return res.status(403).json({ error: "Access denied to this path" });
-    }
+    let prefix =
+      req.query.path || (isSuperAdmin ? "uploads/" : `uploads/${userId}/`);
     if (!prefix.endsWith("/")) prefix += "/";
+
+    // Proprio OU Super Admin OU dossier partagé avec moi
+    if (!isSuperAdmin && !prefix.startsWith(`uploads/${userId}/`)) {
+      const ok = await canAccessKey(prefix, req.user);
+      if (!ok) {
+        return res.status(403).json({ error: "Access denied to this path" });
+      }
+    }
 
     const response = await s3.send(
       new ListObjectsV2Command({
@@ -115,7 +105,10 @@ router.get("/", requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error("List files error:", err.message);
-    res.status(500).json({ error: "Could not list files from S3", details: err.message });
+    res.status(500).json({
+      error: "Could not list files from S3",
+      details: err.message,
+    });
   }
 });
 
@@ -131,10 +124,15 @@ router.post("/folder", requireAuth, async (req, res) => {
 
     const userId = req.user.userId;
     let parent = req.body.parent || `uploads/${userId}/`;
-    if (!parent.startsWith(`uploads/${userId}/`) && req.user.role !== "Super Admin") {
-      return res.status(403).json({ error: "Invalid parent path" });
-    }
     if (!parent.endsWith("/")) parent += "/";
+
+    if (req.user.role !== "Super Admin") {
+      const own = parent.startsWith(`uploads/${userId}/`);
+      const sharedWrite = await canAccessKey(parent, req.user, { needWrite: true });
+      if (!own && !sharedWrite) {
+        return res.status(403).json({ error: "Invalid parent path" });
+      }
+    }
 
     const folderKey = `${parent}${safe}/`;
 
@@ -171,7 +169,7 @@ router.post("/move", requireAuth, async (req, res) => {
     if (!key || !destinationPath) {
       return res.status(400).json({ error: "Missing key or destinationPath" });
     }
-    if (!canAccessKey(key, req.user)) {
+    if (!(await canAccessKey(key, req.user, { needWrite: true }))) {
       return res.status(403).json({ error: "You don't have permission to move this file." });
     }
     if (!key.startsWith("uploads/")) {
@@ -181,9 +179,12 @@ router.post("/move", requireAuth, async (req, res) => {
     let dest = destinationPath;
     if (!dest.endsWith("/")) dest += "/";
 
-    const userId = req.user.userId;
-    if (req.user.role !== "Super Admin" && !dest.startsWith(`uploads/${userId}/`)) {
-      return res.status(403).json({ error: "Invalid destination" });
+    if (req.user.role !== "Super Admin") {
+      const ownDest = dest.startsWith(`uploads/${req.user.userId}/`);
+      const sharedDest = await canAccessKey(dest, req.user, { needWrite: true });
+      if (!ownDest && !sharedDest) {
+        return res.status(403).json({ error: "Invalid destination" });
+      }
     }
 
     const fileName = key.split("/").pop();
@@ -228,11 +229,13 @@ router.post("/upload", requireAuth, upload.single("file"), async (req, res) => {
 
     let basePath = (req.body.path || `uploads/${req.user.userId}/`).trim();
     if (!basePath.endsWith("/")) basePath += "/";
-    if (
-      req.user.role !== "Super Admin" &&
-      !basePath.startsWith(`uploads/${req.user.userId}/`)
-    ) {
-      return res.status(403).json({ error: "Invalid upload path" });
+
+    if (req.user.role !== "Super Admin") {
+      const own = basePath.startsWith(`uploads/${req.user.userId}/`);
+      const sharedWrite = await canAccessKey(basePath, req.user, { needWrite: true });
+      if (!own && !sharedWrite) {
+        return res.status(403).json({ error: "Invalid upload path" });
+      }
     }
 
     const uniqueId = crypto.randomUUID();
@@ -275,21 +278,7 @@ router.get("/preview", requireAuth, async (req, res) => {
     const fileKey = req.query.key;
     if (!fileKey) return res.status(400).json({ error: "Missing key" });
 
-    const userId = req.user.userId;
-    const isOwner =
-      fileKey.startsWith(`uploads/${userId}/`) ||
-      fileKey.startsWith(`trash/${userId}/`);
-    const isSuperAdmin = req.user.role === "Super Admin";
-
-    let isSharedWithMe = false;
-    if (!isOwner && !isSuperAdmin) {
-      const shareCheck = await pool.query(
-        `SELECT id FROM shares WHERE file_key = $1 AND shared_with_id = $2`,
-        [fileKey, userId]
-      );
-      isSharedWithMe = shareCheck.rows.length > 0;
-    }
-    if (!isOwner && !isSuperAdmin && !isSharedWithMe) {
+    if (!(await canAccessKey(fileKey, req.user))) {
       return res.status(403).json({ error: "You don't have permission to preview this file." });
     }
 
@@ -309,7 +298,7 @@ router.get("/preview", requireAuth, async (req, res) => {
       });
     }
 
-    const s3 = await getTemporaryS3Client(`user-${userId}`);
+    const s3 = await getTemporaryS3Client(`user-${req.user.userId}`);
     const previewUrl = await getSignedUrl(
       s3,
       new GetObjectCommand({ Bucket: BUCKET_NAME, Key: fileKey }),
@@ -335,21 +324,7 @@ router.get("/download", requireAuth, async (req, res) => {
     const fileKey = req.query.key;
     if (!fileKey) return res.status(400).json({ error: "Missing 'key' query parameter." });
 
-    const userId = req.user.userId;
-    const isOwner =
-      fileKey.startsWith(`uploads/${userId}/`) ||
-      fileKey.startsWith(`trash/${userId}/`);
-    const isSuperAdmin = req.user.role === "Super Admin";
-
-    let isSharedWithMe = false;
-    if (!isOwner && !isSuperAdmin) {
-      const shareCheck = await pool.query(
-        `SELECT id FROM shares WHERE file_key = $1 AND shared_with_id = $2`,
-        [fileKey, userId]
-      );
-      isSharedWithMe = shareCheck.rows.length > 0;
-    }
-    if (!isOwner && !isSuperAdmin && !isSharedWithMe) {
+    if (!(await canAccessKey(fileKey, req.user))) {
       return res.status(403).json({ error: "You don't have permission to download this file." });
     }
 
@@ -379,20 +354,10 @@ router.post("/replace", requireAuth, upload.single("file"), async (req, res) => 
     if (!fileKey) return res.status(400).json({ error: "Missing key" });
     if (!req.file) return res.status(400).json({ error: "No file received" });
 
-    const userId = req.user.userId;
-    const isOwner = fileKey.startsWith(`uploads/${userId}/`);
-    const isSuperAdmin = req.user.role === "Super Admin";
-
-    if (!isOwner && !isSuperAdmin) {
-      const permission = await getSharePermission(fileKey, userId);
-      if (!permission) {
-        return res.status(403).json({ error: "You don't have permission to modify this file." });
-      }
-      if (permission === "Read Only") {
-        return res.status(403).json({
-          error: "This file is shared as Read Only. You cannot modify it.",
-        });
-      }
+    if (!(await canAccessKey(fileKey, req.user, { needWrite: true }))) {
+      return res.status(403).json({
+        error: "You don't have permission to modify this file (need Read & Write).",
+      });
     }
 
     const { mimetype, buffer } = req.file;
@@ -430,7 +395,8 @@ router.post("/trash", requireAuth, async (req, res) => {
     const s3 = await getTemporaryS3Client(`user-${req.user.userId}`);
     const { key } = req.body;
     if (!key) return res.status(400).json({ error: "Missing key" });
-    if (!canAccessKey(key, req.user)) {
+
+    if (!(await canAccessKey(key, req.user, { needWrite: true }))) {
       return res.status(403).json({ error: "You don't have permission to trash this file." });
     }
     if (!key.startsWith("uploads/")) {
@@ -493,7 +459,7 @@ router.post("/restore", requireAuth, async (req, res) => {
     const s3 = await getTemporaryS3Client(`user-${req.user.userId}`);
     const { key } = req.body;
     if (!key) return res.status(400).json({ error: "Missing key" });
-    if (!canAccessKey(key, req.user)) {
+    if (!(await canAccessKey(key, req.user))) {
       return res.status(403).json({ error: "You don't have permission to restore this file." });
     }
     if (!key.startsWith("trash/")) {
@@ -530,7 +496,7 @@ router.delete("/", requireAuth, async (req, res) => {
     const s3 = await getTemporaryS3Client(`user-${req.user.userId}`);
     const { key } = req.body;
     if (!key) return res.status(400).json({ error: "Missing key" });
-    if (!canAccessKey(key, req.user)) {
+    if (!(await canAccessKey(key, req.user, { needWrite: true }))) {
       return res.status(403).json({ error: "You don't have permission to delete this file." });
     }
 

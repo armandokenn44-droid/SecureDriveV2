@@ -2,14 +2,15 @@ import { Router } from "express";
 import { requireAuth } from "../middleware/auth.middleware.js";
 import { pool } from "../db/pool.js";
 import { logActivity } from "../activity/activity.routes.js";
+import { asFolderKey } from "./access.js";
 
 const router = Router();
 router.use(requireAuth);
 
-// POST /api/shares
+// POST /api/shares  (fichier OU dossier)
 router.post("/", async (req, res) => {
   try {
-    const { fileKey, fileName, email, permission } = req.body;
+    let { fileKey, fileName, email, permission, isFolder } = req.body;
     const ownerId = req.user.userId;
 
     if (!fileKey || !fileName || !email || !permission) {
@@ -21,10 +22,18 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "Invalid permission" });
     }
 
+    // Dossier → clé avec / à la fin
+    if (isFolder === true || fileKey.endsWith("/")) {
+      fileKey = asFolderKey(fileKey);
+      isFolder = true;
+    }
+
     const isOwner = fileKey.startsWith(`uploads/${ownerId}/`);
     const isSuperAdmin = req.user.role === "Super Admin";
     if (!isOwner && !isSuperAdmin) {
-      return res.status(403).json({ error: "You can only share your own files" });
+      return res.status(403).json({
+        error: "You can only share your own files or folders",
+      });
     }
 
     const userResult = await pool.query(
@@ -40,7 +49,7 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "This account is disabled" });
     }
     if (target.id === ownerId) {
-      return res.status(400).json({ error: "You cannot share a file with yourself" });
+      return res.status(400).json({ error: "You cannot share with yourself" });
     }
 
     const insert = await pool.query(
@@ -54,14 +63,15 @@ router.post("/", async (req, res) => {
 
     await logActivity({
       userId: req.user.userId,
-      userName: req.user.email ||`User #${req.user.userId}`,
-      action: "Shared a file",
+      userName: req.user.email || `User #${req.user.userId}`,
+      action: isFolder ? "Shared a folder" : "Shared a file",
       detail: `${fileName} → ${email} (${permission})`,
     });
 
     res.status(201).json({
-      message: "File shared successfully",
+      message: isFolder ? "Folder shared successfully" : "File shared successfully",
       share: insert.rows[0],
+      isFolder: !!isFolder,
       sharedWith: {
         id: target.id,
         email: target.email,
@@ -70,7 +80,7 @@ router.post("/", async (req, res) => {
     });
   } catch (err) {
     console.error("Share error:", err.message);
-    res.status(500).json({ error: "Could not share file" });
+    res.status(500).json({ error: "Could not share" });
   }
 });
 
@@ -79,14 +89,22 @@ router.get("/with-me", async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT s.id, s.file_key, s.file_name, s.permission, s.created_at,
-              u.first_name AS owner_first_name, u.last_name AS owner_last_name, u.email AS owner_email
+              u.first_name AS owner_first_name,
+              u.last_name AS owner_last_name,
+              u.email AS owner_email
        FROM shares s
        JOIN users u ON u.id = s.owner_id
        WHERE s.shared_with_id = $1
        ORDER BY s.created_at DESC`,
       [req.user.userId]
     );
-    res.json({ count: result.rows.length, shares: result.rows });
+
+    const shares = result.rows.map((row) => ({
+      ...row,
+      isFolder: typeof row.file_key === "string" && row.file_key.endsWith("/"),
+    }));
+
+    res.json({ count: shares.length, shares });
   } catch (err) {
     console.error("Shared with me error:", err.message);
     res.status(500).json({ error: "Could not load shared files" });
@@ -98,28 +116,36 @@ router.get("/by-me", async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT s.id, s.file_key, s.file_name, s.permission, s.created_at,
-              u.first_name AS target_first_name, u.last_name AS target_last_name, u.email AS target_email
+              u.first_name AS target_first_name,
+              u.last_name AS target_last_name,
+              u.email AS target_email
        FROM shares s
        JOIN users u ON u.id = s.shared_with_id
        WHERE s.owner_id = $1
        ORDER BY s.created_at DESC`,
       [req.user.userId]
     );
-    res.json({ count: result.rows.length, shares: result.rows });
+
+    const shares = result.rows.map((row) => ({
+      ...row,
+      isFolder: typeof row.file_key === "string" && row.file_key.endsWith("/"),
+    }));
+
+    res.json({ count: shares.length, shares });
   } catch (err) {
     console.error("Shared by me error:", err.message);
     res.status(500).json({ error: "Could not load shares" });
   }
 });
 
-// DELETE /api/shares/:id
+// DELETE /api/shares/:id  → retire l'accès dossier + fichiers de ce share
 router.delete("/:id", async (req, res) => {
   try {
     const shareId = req.params.id;
     const result = await pool.query(
       `DELETE FROM shares
        WHERE id = $1 AND (owner_id = $2 OR $3 = 'Super Admin')
-       RETURNING id, file_name`,
+       RETURNING id, file_name, file_key`,
       [shareId, req.user.userId, req.user.role]
     );
 
@@ -127,14 +153,21 @@ router.delete("/:id", async (req, res) => {
       return res.status(404).json({ error: "Share not found or not allowed" });
     }
 
+    const row = result.rows[0];
+    const wasFolder = row.file_key && row.file_key.endsWith("/");
+
     await logActivity({
       userId: req.user.userId,
-      userName: req.user.email|| req.user.userName || `User #${req.user.userId}`,
-      action: "Removed file share",
-      detail: result.rows[0].file_name || `share #${shareId}`,
+      userName: req.user.email || `User #${req.user.userId}`,
+      action: wasFolder ? "Removed folder share" : "Removed file share",
+      detail: row.file_name || `share #${shareId}`,
     });
 
-    res.json({ message: "Share removed" });
+    res.json({
+      message: wasFolder
+        ? "Folder share removed (access to folder and its files revoked)"
+        : "Share removed",
+    });
   } catch (err) {
     console.error("Unshare error:", err.message);
     res.status(500).json({ error: "Could not remove share" });
