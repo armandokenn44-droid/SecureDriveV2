@@ -501,21 +501,45 @@ export default function MyFiles() {
   const root = getUserRootPath(user);
   const canGoUp = path !== root && path.length > root.length;
 
-  const moveDestinations = [];
-  if (canGoUp) {
-    const trimmed = path.replace(/\/$/, "");
-    const parts = trimmed.split("/");
-    parts.pop();
-    let parent = parts.join("/") + "/";
-    if (!parent.startsWith(root)) parent = root;
-    moveDestinations.push({ key: parent, name: "← Parent folder" });
-  }
-  folders.forEach((f) => {
-    if (!moveModal || f.key !== moveModal.key) {
-      moveDestinations.push({ key: f.key, name: `📁 ${f.name}` });
-    }
-  });
+    // Destinations pour Move :
+  // - sortir vers la racine My Files
+  // - sortir vers le dossier parent
+  // - entrer dans un dossier visible ici
+   const moveDestinations = [];
 
+  if (moveModal) {
+    const fileKey = moveModal.key || "";
+    const relative = fileKey.startsWith(root) ? fileKey.slice(root.length) : "";
+    const parts = relative.split("/").filter(Boolean);
+    // parts = ["Projet", "uuid-doc.pdf"] → depth dossiers = parts.length - 1
+
+    // Sortir → racine My Files
+    if (parts.length > 1) {
+      moveDestinations.push({
+        key: root,
+        name: "🏠 Sortir → My Files (racine)",
+      });
+    }
+
+    // Sortir → dossier parent (si plus d'un niveau de dossier)
+    if (parts.length > 2) {
+      const parentParts = parts.slice(0, -2); // enlever fichier + dossier actuel
+      const parentPath = root + parentParts.join("/") + "/";
+      moveDestinations.push({
+        key: parentPath,
+        name: "↑ Sortir → dossier parent",
+      });
+    }
+
+    // Aller dans un dossier listé ici (même niveau que l'écran actuel)
+    folders.forEach((f) => {
+      const dest = f.key.endsWith("/") ? f.key : `${f.key}/`;
+      moveDestinations.push({
+        key: dest,
+        name: `📁 Aller dans « ${f.name} »`,
+      });
+    });
+  }
   const shareIsFolder =
     shareModal &&
     ((typeof shareModal.key === "string" && shareModal.key.endsWith("/")) ||
@@ -915,51 +939,54 @@ export default function MyFiles() {
       )}
 
       {moveModal && (
-        <Modal onClose={() => setMoveModal(null)}>
-          <h3 style={{ margin: "0 0 6px", fontSize: "1.15rem" }}>Move</h3>
-          <p style={{ margin: "0 0 16px", color: "#64748b", fontSize: "0.9rem" }}>
-            Choose where to move <b>{moveModal.name}</b>
-          </p>
-          {moveDestinations.length === 0 ? (
-            <p style={{ color: "#64748b" }}>No folder available.</p>
-          ) : (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 8,
-                maxHeight: 280,
-                overflowY: "auto",
-              }}
-            >
-              {moveDestinations.map((d) => (
-                <button
-                  key={d.key}
-                  type="button"
-                  onClick={() => doMove(moveModal, d.key)}
-                  style={{
-                    textAlign: "left",
-                    padding: "12px 14px",
-                    borderRadius: 10,
-                    border: "1px solid #e2e8f0",
-                    background: "#f8fafc",
-                    cursor: "pointer",
-                    fontWeight: 500,
-                  }}
-                >
-                  {d.name}
-                </button>
-              ))}
-            </div>
-          )}
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
-            <button type="button" className="btn btn-outline" onClick={() => setMoveModal(null)}>
-              Cancel
-            </button>
-          </div>
-        </Modal>
-      )}
-
+  <Modal onClose={() => setMoveModal(null)}>
+    <h3 style={{ margin: "0 0 6px", fontSize: "1.15rem" }}>Déplacer</h3>
+    <p style={{ margin: "0 0 16px", color: "#64748b", fontSize: "0.9rem" }}>
+      Fichier : <b>{moveModal.name}</b>
+      <br />
+      Choisis : <b>sortir</b> du dossier, ou <b>aller</b> dans un autre dossier.
+    </p>
+    {moveDestinations.length === 0 ? (
+      <p style={{ color: "#64748b" }}>
+        Aucune destination. Crée un dossier ou ouvre un autre emplacement.
+      </p>
+    ) : (
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          maxHeight: 280,
+          overflowY: "auto",
+        }}
+      >
+        {moveDestinations.map((d) => (
+          <button
+            key={d.key}
+            type="button"
+            onClick={() => doMove(moveModal, d.key)}
+            style={{
+              textAlign: "left",
+              padding: "12px 14px",
+              borderRadius: 10,
+              border: "1px solid #e2e8f0",
+              background: "#f8fafc",
+              cursor: "pointer",
+              fontWeight: 500,
+            }}
+          >
+            {d.name}
+          </button>
+        ))}
+      </div>
+    )}
+    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+      <button type="button" className="btn btn-outline" onClick={() => setMoveModal(null)}>
+        Cancel
+      </button>
+    </div>
+  </Modal>
+)}
       {confirm && (
         <Modal onClose={() => setConfirm(null)}>
           <h3 style={{ margin: "0 0 8px", fontSize: "1.15rem" }}>{confirm.title}</h3>
