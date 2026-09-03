@@ -59,6 +59,7 @@ export default function MyFiles() {
 
   const [path, setPath] = useState(() => getUserRootPath(user));
   const [folders, setFolders] = useState([]);
+  const [moveFolderOptions, setMoveFolderOptions] = useState([]);
   const [files, setFiles] = useState([]);
   const [favoriteKeys, setFavoriteKeys] = useState(new Set());
   const [loading, setLoading] = useState(true);
@@ -409,13 +410,43 @@ export default function MyFiles() {
     setMenu(null);
     setMoveModal(item);
   }
+// eslint-disable-next-line no-redeclare
+async function openMoveModal(item) {
+  setMenu(null);
+  setMoveModal(item);
+  setMoveFolderOptions([]);
 
-  function openShareModal(item) {
-    setMenu(null);
-    setShareEmail("");
-    setSharePermission("Read Only");
-    setShareModal(item);
+  const token = localStorage.getItem("token");
+  const rootPath = getUserRootPath(user);
+
+  try {
+    // dossiers à la racine (moi, Project, …)
+    const resRoot = await fetch(
+      `${API_BASE}/api/files?path=${encodeURIComponent(rootPath)}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const dataRoot = await resRoot.json();
+    const fromRoot = resRoot.ok ? dataRoot.folders || [] : [];
+
+    // dossiers du chemin actuel (sous-dossiers)
+    const fromHere = folders || [];
+
+    // fusion sans doublon
+    const map = new Map();
+    [...fromRoot, ...fromHere].forEach((f) => {
+      const key = f.key.endsWith("/") ? f.key : `${f.key}/`;
+      map.set(key, { key, name: f.name });
+    });
+    setMoveFolderOptions([...map.values()]);
+  } catch {
+    setMoveFolderOptions(
+      (folders || []).map((f) => ({
+        key: f.key.endsWith("/") ? f.key : `${f.key}/`,
+        name: f.name,
+      }))
+    );
   }
+}
 
   async function handleShare(e) {
     e.preventDefault();
@@ -500,75 +531,47 @@ export default function MyFiles() {
   const crumbs = breadcrumbParts();
   const root = getUserRootPath(user);
   const canGoUp = path !== root && path.length > root.length;
+const moveDestinations = [];
 
-   // Destinations pour Move :
-  // - sortir vers la racine My Files
-  // - sortir vers le dossier parent
-  // - entrer dans un dossier visible ici
-  const moveDestinations = [];
+if (moveModal) {
+  const fileKey = moveModal.key || "";
+  const relative = fileKey.startsWith(root) ? fileKey.slice(root.length) : "";
+  const parts = relative.split("/").filter(Boolean);
+  // parts = ["Project", "file.pdf"] → length 2
 
-  if (moveModal) {
-    const fileKey = moveModal.key || "";
-    const fileDir = fileKey.includes("/")
-      ? fileKey.slice(0, fileKey.lastIndexOf("/") + 1)
-      : root;
+  // dossier actuel du fichier (pour ne pas proposer "move here")
+  let currentDir = root;
+  if (parts.length > 1) {
+    currentDir = root + parts.slice(0, -1).join("/") + "/";
+  }
 
-    // 1) Racine My Files (sortir complètement)
-    if (fileDir !== root && !fileDir.startsWith(root) === false) {
-      // fichier pas déjà à la racine
-    }
-    // eslint-disable-next-line no-unused-vars
-    const atRoot =
-      fileDir === root ||
-      fileKey.startsWith(root) && fileKey.slice(root.length).split("/").filter(Boolean).length <= 1 &&
-      !fileKey.slice(root.length).includes("/");
-
-    // plus simple : si le fichier n'est pas directement sous root
-    const relative = fileKey.startsWith(root) ? fileKey.slice(root.length) : fileKey;
-    const depth = relative.split("/").filter(Boolean).length; // nom fichier compte 1
-
-    if (depth > 1) {
-      moveDestinations.push({
-        key: root,
-        name: "🏠 My Files (sortir du dossier → racine)",
-      });
-    }
-
-    // 2) Dossier parent (un cran au-dessus)
-    if (depth > 1) {
-      const parts = fileKey.split("/");
-      parts.pop(); // enlever le nom du fichier
-      if (parts[parts.length - 1] === "") parts.pop();
-      // remonter d'un dossier
-      const parentParts = fileKey.startsWith(root)
-        ? fileKey.slice(root.length).split("/").filter(Boolean)
-        : [];
-      // parentParts = [dossier1, dossier2, fichier]
-      if (parentParts.length >= 2) {
-        parentParts.pop(); // fichier
-        parentParts.pop(); // dossier actuel
-        const parentPath = root + (parentParts.length ? parentParts.join("/") + "/" : "");
-        if (parentPath !== root) {
-          moveDestinations.push({
-            key: parentPath,
-            name: "↑ Dossier parent (sortir d'un cran)",
-          });
-        }
-      } else if (parentParts.length === 1) {
-        // fichier dans un seul dossier sous root → parent = root (déjà ajouté)
-      }
-    }
-
-    // 3) Dossiers visibles dans le chemin actuel (aller dans un autre dossier)
-    folders.forEach((f) => {
-      if (f.key !== moveModal.key) {
-        moveDestinations.push({
-          key: f.key.endsWith("/") ? f.key : f.key + "/",
-          name: `📁 Aller dans « ${f.name} »`,
-        });
-      }
+  // 1) Sortir → racine
+  if (parts.length > 1) {
+    moveDestinations.push({
+      key: root,
+      name: "My Files (leave folder → root)",
     });
   }
+
+  // 2) Sortir → parent (si plus profond)
+  if (parts.length > 2) {
+    const parentPath = root + parts.slice(0, -2).join("/") + "/";
+    moveDestinations.push({
+      key: parentPath,
+      name: "Parent folder (go up one level)",
+    });
+  }
+
+  // 3) Aller dans un autre dossier (moi, Project, …)
+  moveFolderOptions.forEach((f) => {
+    const dest = f.key.endsWith("/") ? f.key : `${f.key}/`;
+    if (dest === currentDir) return; // déjà dedans
+    moveDestinations.push({
+      key: dest,
+      name: `Go to folder “${f.name}”`,
+    });
+  });
+}
   const shareIsFolder =
     shareModal &&
     ((typeof shareModal.key === "string" && shareModal.key.endsWith("/")) ||
@@ -839,7 +842,7 @@ export default function MyFiles() {
               <button type="button" onClick={() => openFolder(menu.item.key)}>
                 Open
               </button>
-              <button type="button" onClick={() => openShareModal(menu.item)}>
+              <button type="button" onClick={() => shareModal(menu.item)}>
                 Share…
               </button>
               <button type="button" onClick={() => openMoveModal(menu.item)}>
@@ -866,7 +869,7 @@ export default function MyFiles() {
               <button type="button" onClick={() => toggleFavorite(menu.item)}>
                 {favoriteKeys.has(menu.item.key) ? "Remove favorite" : "Add to favorites"}
               </button>
-              <button type="button" onClick={() => openShareModal(menu.item)}>
+              <button type="button" onClick={() => shareModal(menu.item)}>
                 Share…
               </button>
               <button type="button" onClick={() => openMoveModal(menu.item)}>
@@ -967,18 +970,16 @@ export default function MyFiles() {
         </Modal>
       )}
 
-      {moveModal && (
+  {moveModal && (
   <Modal onClose={() => setMoveModal(null)}>
-    <h3 style={{ margin: "0 0 6px", fontSize: "1.15rem" }}>Déplacer</h3>
+    <h3 style={{ margin: "0 0 6px", fontSize: "1.15rem" }}>Move</h3>
     <p style={{ margin: "0 0 16px", color: "#64748b", fontSize: "0.9rem" }}>
-      Fichier : <b>{moveModal.name}</b>
+      File: <b>{moveModal.name}</b>
       <br />
-      Choisis : <b>sortir</b> du dossier, ou <b>aller</b> dans un autre dossier.
+      Choose: leave this folder, or move into another folder.
     </p>
     {moveDestinations.length === 0 ? (
-      <p style={{ color: "#64748b" }}>
-        Aucune destination. Crée un dossier ou ouvre un autre emplacement.
-      </p>
+      <p style={{ color: "#64748b" }}>No destination available.</p>
     ) : (
       <div
         style={{
