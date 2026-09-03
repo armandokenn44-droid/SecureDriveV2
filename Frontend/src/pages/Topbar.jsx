@@ -1,15 +1,16 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { getLang, setLang, t } from "../i18n.js";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
 function timeAgo(value) {
   if (!value) return "";
   const sec = Math.floor((Date.now() - new Date(value).getTime()) / 1000);
-  if (sec < 60) return "just now";
-  if (sec < 3600) return `${Math.floor(sec / 60)} min ago`;
-  if (sec < 86400) return `${Math.floor(sec / 3600)} h ago`;
-  return `${Math.floor(sec / 86400)} days ago`;
+  if (sec < 60) return t("justNow");
+  if (sec < 3600) return `${Math.floor(sec / 60)} ${t("minAgo")}`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)} ${t("hoursAgo")}`;
+  return `${Math.floor(sec / 86400)} ${t("daysAgo")}`;
 }
 
 export default function Topbar({
@@ -22,6 +23,9 @@ export default function Topbar({
   onMenuClick,
 }) {
   const navigate = useNavigate();
+  const [lang, setLangState] = useState(getLang());
+  const [, setTick] = useState(0);
+
   const [q, setQ] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -34,6 +38,21 @@ export default function Topbar({
   const searchRef = useRef(null);
   const notifRef = useRef(null);
   const debounceRef = useRef(null);
+
+  useEffect(() => {
+    function onLang() {
+      setLangState(getLang());
+      setTick((x) => x + 1);
+    }
+    window.addEventListener("sd-lang-change", onLang);
+    return () => window.removeEventListener("sd-lang-change", onLang);
+  }, []);
+
+  function switchLang(next) {
+    setLang(next);
+    setLangState(next);
+    setTick((x) => x + 1);
+  }
 
   useEffect(() => {
     function onDocClick(e) {
@@ -149,7 +168,7 @@ export default function Topbar({
         {breadcrumbs.length > 0 && (
           <div className="breadcrumb">
             {breadcrumbs.map((crumb, i) => (
-              <React.Fragment key={crumb}>
+              <React.Fragment key={`${crumb}-${i}`}>
                 {i > 0 && <span>/</span>}
                 <span className={i === breadcrumbs.length - 1 ? "crumb-current" : ""}>
                   {crumb}
@@ -165,7 +184,7 @@ export default function Topbar({
         <SearchIcon />
         <input
           type="text"
-          placeholder="Search files, folders, users…"
+          placeholder={t("searchPlaceholder")}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onFocus={() => q.trim() && setSearchOpen(true)}
@@ -189,12 +208,12 @@ export default function Topbar({
           >
             {searchLoading && (
               <div style={{ padding: 12, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-                Searching…
+                {t("searching")}
               </div>
             )}
             {!searchLoading && !hasResults && (
               <div style={{ padding: 12, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-                No results for “{q}”
+                {t("noResults")} “{q}”
               </div>
             )}
             {!searchLoading &&
@@ -222,9 +241,43 @@ export default function Topbar({
       <div className="topbar-right">
         {onUploadClick && (
           <button className="btn-primary-upload" onClick={onUploadClick}>
-            <UploadIcon /> Upload Files
+            <UploadIcon /> {t("uploadFiles")}
           </button>
         )}
+
+        {/* Language switch EN | FR */}
+        <div style={{ display: "flex", gap: 2, alignItems: "center", marginRight: 4 }}>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => switchLang("en")}
+            title="English"
+            style={{
+              fontWeight: lang === "en" ? 700 : 400,
+              opacity: lang === "en" ? 1 : 0.5,
+              fontSize: "0.75rem",
+              minWidth: 32,
+              padding: "6px 8px",
+            }}
+          >
+            EN
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => switchLang("fr")}
+            title="Français"
+            style={{
+              fontWeight: lang === "fr" ? 700 : 400,
+              opacity: lang === "fr" ? 1 : 0.5,
+              fontSize: "0.75rem",
+              minWidth: 32,
+              padding: "6px 8px",
+            }}
+          >
+            FR
+          </button>
+        </div>
 
         <button className="icon-btn" onClick={onToggleDarkMode} aria-label="Toggle theme">
           {darkMode ? <SunIcon /> : <MoonIcon />}
@@ -266,16 +319,16 @@ export default function Topbar({
               }}
             >
               <div style={{ fontWeight: 700, marginBottom: 8, fontSize: "0.9rem" }}>
-                Notifications
+                {t("notifications")}
               </div>
               {notifLoading && (
                 <div style={{ fontSize: "0.83rem", color: "var(--text-secondary)" }}>
-                  Loading…
+                  {t("loading")}
                 </div>
               )}
               {!notifLoading && notifications.length === 0 && (
                 <div style={{ fontSize: "0.83rem", color: "var(--text-secondary)" }}>
-                  No notifications yet
+                  {t("noNotifications")}
                 </div>
               )}
               {!notifLoading &&

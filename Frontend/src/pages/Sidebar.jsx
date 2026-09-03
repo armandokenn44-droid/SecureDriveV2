@@ -1,26 +1,54 @@
+import { useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { ROLES } from "../data/mockData.js";
+import { t } from "../i18n.js";
 
 const FILE_NAV = [
-  { to: "dashboard", label: "Dashboard", icon: GridIcon },
-  { to: "files", label: "My Files", icon: FolderIcon },
-  { to: "shared-with-me", label: "Shared With Me", icon: ShareIcon },
-  { to: "shared-by-me", label: "Shared By Me", icon: SendIcon },
-  { to: "recent", label: "Recent", icon: ClockIcon },
-  { to: "favorites", label: "Favorites", icon: StarIcon },
-  { to: "trash", label: "Trash", icon: TrashIcon },
+  { to: "dashboard", labelKey: "dashboard", icon: GridIcon },
+  { to: "files", labelKey: "myFiles", icon: FolderIcon },
+  { to: "shared-with-me", labelKey: "sharedWithMe", icon: ShareIcon },
+  { to: "shared-by-me", labelKey: "sharedByMe", icon: SendIcon },
+  { to: "recent", labelKey: "recent", icon: ClockIcon },
+  { to: "favorites", labelKey: "favorites", icon: StarIcon },
+  { to: "trash", labelKey: "trash", icon: TrashIcon },
 ];
 
 const ADMIN_NAV = [
-  { to: "users", label: "User Management", icon: UsersIcon, roles: [ROLES.SUPER_ADMIN, ROLES.MANAGER] },
-  { to: "activity", label: "Activity Log", icon: ActivityIcon, roles: [ROLES.SUPER_ADMIN, ROLES.MANAGER] },
-  { to: "settings", label: "System Settings", icon: SettingsIcon, roles: [ROLES.SUPER_ADMIN] },
+  {
+    to: "users",
+    labelKey: "userManagement",
+    icon: UsersIcon,
+    roles: [ROLES.SUPER_ADMIN, ROLES.MANAGER],
+  },
+  {
+    to: "activity",
+    labelKey: "activityLog",
+    icon: ActivityIcon,
+    roles: [ROLES.SUPER_ADMIN, ROLES.MANAGER],
+  },
+  {
+    to: "settings",
+    labelKey: "systemSettings",
+    icon: SettingsIcon,
+    roles: [ROLES.SUPER_ADMIN],
+  },
 ];
 
 export default function Sidebar({ user, onNavigate }) {
   const navigate = useNavigate();
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    function onLang() {
+      setTick((x) => x + 1);
+    }
+    window.addEventListener("sd-lang-change", onLang);
+    return () => window.removeEventListener("sd-lang-change", onLang);
+  }, []);
+
   const adminItems = ADMIN_NAV.filter((item) => item.roles.includes(user.role));
-  const storagePct = Math.round((user.storageUsedGB / user.storageTotalGB) * 100) || 0;
+  const storagePct =
+    Math.round((user.storageUsedGB / user.storageTotalGB) * 100) || 0;
 
   function handleNav() {
     onNavigate?.();
@@ -37,7 +65,7 @@ export default function Sidebar({ user, onNavigate }) {
         </div>
       </div>
 
-      <div className="sidebar-section-label">Navigation</div>
+      <div className="sidebar-section-label">{t("navigation")}</div>
       <nav className="sidebar-nav">
         {FILE_NAV.map((item) => (
           <NavLink
@@ -46,14 +74,14 @@ export default function Sidebar({ user, onNavigate }) {
             className={({ isActive }) => `sidebar-link${isActive ? " active" : ""}`}
             onClick={handleNav}
           >
-            <item.icon /> {item.label}
+            <item.icon /> {t(item.labelKey)}
           </NavLink>
         ))}
       </nav>
 
       {adminItems.length > 0 && (
         <>
-          <div className="sidebar-section-label">Administration</div>
+          <div className="sidebar-section-label">{t("administration")}</div>
           <nav className="sidebar-nav">
             {adminItems.map((item) => (
               <NavLink
@@ -62,7 +90,7 @@ export default function Sidebar({ user, onNavigate }) {
                 className={({ isActive }) => `sidebar-link${isActive ? " active" : ""}`}
                 onClick={handleNav}
               >
-                <item.icon /> {item.label}
+                <item.icon /> {t(item.labelKey)}
               </NavLink>
             ))}
           </nav>
@@ -74,7 +102,7 @@ export default function Sidebar({ user, onNavigate }) {
       <div className="sidebar-bottom">
         <div className="sidebar-storage-card">
           <div className="sidebar-storage-top">
-            <span>Storage</span>
+            <span>{t("storage")}</span>
             <span>
               {user.storageUsedGB} / {user.storageTotalGB} GB
             </span>
@@ -112,7 +140,14 @@ function ShieldIcon() {
   );
 }
 function iconProps() {
-  return { width: 17, height: 17, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 };
+  return {
+    width: 17,
+    height: 17,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 2,
+  };
 }
 function GridIcon() {
   return (
