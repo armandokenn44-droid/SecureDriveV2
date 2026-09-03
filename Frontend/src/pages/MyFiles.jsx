@@ -501,43 +501,72 @@ export default function MyFiles() {
   const root = getUserRootPath(user);
   const canGoUp = path !== root && path.length > root.length;
 
-    // Destinations pour Move :
+   // Destinations pour Move :
   // - sortir vers la racine My Files
   // - sortir vers le dossier parent
   // - entrer dans un dossier visible ici
-   const moveDestinations = [];
+  const moveDestinations = [];
 
   if (moveModal) {
     const fileKey = moveModal.key || "";
-    const relative = fileKey.startsWith(root) ? fileKey.slice(root.length) : "";
-    const parts = relative.split("/").filter(Boolean);
-    // parts = ["Projet", "uuid-doc.pdf"] → depth dossiers = parts.length - 1
+    const fileDir = fileKey.includes("/")
+      ? fileKey.slice(0, fileKey.lastIndexOf("/") + 1)
+      : root;
 
-    // Sortir → racine My Files
-    if (parts.length > 1) {
+    // 1) Racine My Files (sortir complètement)
+    if (fileDir !== root && !fileDir.startsWith(root) === false) {
+      // fichier pas déjà à la racine
+    }
+    // eslint-disable-next-line no-unused-vars
+    const atRoot =
+      fileDir === root ||
+      fileKey.startsWith(root) && fileKey.slice(root.length).split("/").filter(Boolean).length <= 1 &&
+      !fileKey.slice(root.length).includes("/");
+
+    // plus simple : si le fichier n'est pas directement sous root
+    const relative = fileKey.startsWith(root) ? fileKey.slice(root.length) : fileKey;
+    const depth = relative.split("/").filter(Boolean).length; // nom fichier compte 1
+
+    if (depth > 1) {
       moveDestinations.push({
         key: root,
-        name: "🏠 Sortir → My Files (racine)",
+        name: "🏠 My Files (sortir du dossier → racine)",
       });
     }
 
-    // Sortir → dossier parent (si plus d'un niveau de dossier)
-    if (parts.length > 2) {
-      const parentParts = parts.slice(0, -2); // enlever fichier + dossier actuel
-      const parentPath = root + parentParts.join("/") + "/";
-      moveDestinations.push({
-        key: parentPath,
-        name: "↑ Sortir → dossier parent",
-      });
+    // 2) Dossier parent (un cran au-dessus)
+    if (depth > 1) {
+      const parts = fileKey.split("/");
+      parts.pop(); // enlever le nom du fichier
+      if (parts[parts.length - 1] === "") parts.pop();
+      // remonter d'un dossier
+      const parentParts = fileKey.startsWith(root)
+        ? fileKey.slice(root.length).split("/").filter(Boolean)
+        : [];
+      // parentParts = [dossier1, dossier2, fichier]
+      if (parentParts.length >= 2) {
+        parentParts.pop(); // fichier
+        parentParts.pop(); // dossier actuel
+        const parentPath = root + (parentParts.length ? parentParts.join("/") + "/" : "");
+        if (parentPath !== root) {
+          moveDestinations.push({
+            key: parentPath,
+            name: "↑ Dossier parent (sortir d'un cran)",
+          });
+        }
+      } else if (parentParts.length === 1) {
+        // fichier dans un seul dossier sous root → parent = root (déjà ajouté)
+      }
     }
 
-    // Aller dans un dossier listé ici (même niveau que l'écran actuel)
+    // 3) Dossiers visibles dans le chemin actuel (aller dans un autre dossier)
     folders.forEach((f) => {
-      const dest = f.key.endsWith("/") ? f.key : `${f.key}/`;
-      moveDestinations.push({
-        key: dest,
-        name: `📁 Aller dans « ${f.name} »`,
-      });
+      if (f.key !== moveModal.key) {
+        moveDestinations.push({
+          key: f.key.endsWith("/") ? f.key : f.key + "/",
+          name: `📁 Aller dans « ${f.name} »`,
+        });
+      }
     });
   }
   const shareIsFolder =
