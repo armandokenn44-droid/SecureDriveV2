@@ -3,23 +3,10 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar.jsx";
 import Topbar from "./Topbar.jsx";
 import UploadFile from "./UploadFile.jsx";
+import { t } from "../i18n.js";
 import "./AdminDashboard.css";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
-
-const PAGE_META = {
-  "/admin/dashboard": { title: "Dashboard", breadcrumbs: ["SecureDrive", "Dashboard"], upload: true },
-  "/admin/files": { title: "My Files", breadcrumbs: ["SecureDrive", "My Files"], upload: true },
-  "/admin/shared-with-me": { title: "Shared With Me", breadcrumbs: ["SecureDrive", "Shared With Me"], upload: false },
-  "/admin/shared-by-me": { title: "Shared By Me", breadcrumbs: ["SecureDrive", "Shared By Me"], upload: false },
-  "/admin/recent": { title: "Recent", breadcrumbs: ["SecureDrive", "Recent"], upload: false },
-  "/admin/favorites": { title: "Favorites", breadcrumbs: ["SecureDrive", "Favorites"], upload: false },
-  "/admin/trash": { title: "Trash", breadcrumbs: ["SecureDrive", "Trash"], upload: false },
-  "/admin/users": { title: "User Management", breadcrumbs: ["SecureDrive", "Administration", "Users"], upload: false },
-  "/admin/activity": { title: "Activity Log", breadcrumbs: ["SecureDrive", "Administration", "Activity"], upload: false },
-  "/admin/settings": { title: "System Settings", breadcrumbs: ["SecureDrive", "Administration", "Settings"], upload: false },
-  "/admin/profile": { title: "My Account", breadcrumbs: ["SecureDrive", "My Account"], upload: false },
-};
 
 const ROLE_AVATAR_COLOR = {
   "Super Admin": "#2563eb",
@@ -28,9 +15,79 @@ const ROLE_AVATAR_COLOR = {
   User: "#0891b2",
 };
 
+function getPageMeta(pathname) {
+  const map = {
+    "/admin/dashboard": {
+      title: t("dashboard"),
+      breadcrumbs: ["SecureDrive", t("dashboard")],
+      upload: true,
+    },
+    "/admin/files": {
+      title: t("myFiles"),
+      breadcrumbs: ["SecureDrive", t("myFiles")],
+      upload: true,
+    },
+    "/admin/shared-with-me": {
+      title: t("sharedWithMe"),
+      breadcrumbs: ["SecureDrive", t("sharedWithMe")],
+      upload: false,
+    },
+    "/admin/shared-by-me": {
+      title: t("sharedByMe"),
+      breadcrumbs: ["SecureDrive", t("sharedByMe")],
+      upload: false,
+    },
+    "/admin/recent": {
+      title: t("recent"),
+      breadcrumbs: ["SecureDrive", t("recent")],
+      upload: false,
+    },
+    "/admin/favorites": {
+      title: t("favorites"),
+      breadcrumbs: ["SecureDrive", t("favorites")],
+      upload: false,
+    },
+    "/admin/trash": {
+      title: t("trash"),
+      breadcrumbs: ["SecureDrive", t("trash")],
+      upload: false,
+    },
+    "/admin/users": {
+      title: t("userManagement"),
+      breadcrumbs: ["SecureDrive", t("administration"), t("userManagement")],
+      upload: false,
+    },
+    "/admin/activity": {
+      title: t("activityLog"),
+      breadcrumbs: ["SecureDrive", t("administration"), t("activityLog")],
+      upload: false,
+    },
+    "/admin/settings": {
+      title: t("systemSettings"),
+      breadcrumbs: ["SecureDrive", t("administration"), t("systemSettings")],
+      upload: false,
+    },
+    "/admin/profile": {
+      title: t("myAccount"),
+      breadcrumbs: ["SecureDrive", t("myAccount")],
+      upload: false,
+    },
+  };
+
+  return (
+    map[pathname] || {
+      title: "SecureDrive",
+      breadcrumbs: [],
+      upload: false,
+    }
+  );
+}
+
 function buildDisplayUser(rawUser) {
   const fullName = `${rawUser.firstName} ${rawUser.lastName}`;
-  const initials = ((rawUser.firstName?.[0] || "") + (rawUser.lastName?.[0] || "")).toUpperCase();
+  const initials = (
+    (rawUser.firstName?.[0] || "") + (rawUser.lastName?.[0] || "")
+  ).toUpperCase();
 
   return {
     ...rawUser,
@@ -70,8 +127,8 @@ function mapS3File(item) {
     item.size < 1024
       ? `${item.size} B`
       : item.size < 1024 * 1024
-      ? `${(item.size / 1024).toFixed(0)} KB`
-      : `${(item.size / (1024 * 1024)).toFixed(1)} MB`;
+        ? `${(item.size / 1024).toFixed(0)} KB`
+        : `${(item.size / (1024 * 1024)).toFixed(1)} MB`;
 
   const modified = item.lastModified
     ? new Date(item.lastModified).toLocaleDateString("fr-FR")
@@ -97,6 +154,15 @@ export default function AdminLayout() {
   const [filesLoading, setFilesLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    function onLang() {
+      setTick((x) => x + 1);
+    }
+    window.addEventListener("sd-lang-change", onLang);
+    return () => window.removeEventListener("sd-lang-change", onLang);
+  }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -148,12 +214,7 @@ export default function AdminLayout() {
     document.body.classList.toggle("dark-mode", darkMode);
   }, [darkMode]);
 
-  const meta =
-    PAGE_META[location.pathname] || {
-      title: "SecureDrive",
-      breadcrumbs: [],
-      upload: false,
-    };
+  const meta = getPageMeta(location.pathname);
 
   function addFile(file) {
     setFiles((prev) => [file, ...prev]);
