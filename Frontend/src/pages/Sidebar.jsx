@@ -47,9 +47,6 @@ export default function Sidebar({ user, onNavigate }) {
   }, []);
 
   const adminItems = ADMIN_NAV.filter((item) => item.roles.includes(user.role));
-  const storagePct =
-    Math.round((user.storageUsedGB / user.storageTotalGB) * 100) || 0;
-
   function handleNav() {
     onNavigate?.();
   }
@@ -100,18 +97,6 @@ export default function Sidebar({ user, onNavigate }) {
       <div className="sidebar-spacer" />
 
       <div className="sidebar-bottom">
-        <div className="sidebar-storage-card">
-          <div className="sidebar-storage-top">
-            <span>{t("storage")}</span>
-            <span>
-              {user.storageUsedGB} / {user.storageTotalGB} GB
-            </span>
-          </div>
-          <div className="sidebar-storage-track">
-            <div className="sidebar-storage-fill" style={{ width: `${storagePct}%` }} />
-          </div>
-        </div>
-
         <div
           className="sidebar-user-card"
           onClick={() => {
