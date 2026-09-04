@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { t } from "../i18n.js";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
@@ -11,6 +12,13 @@ export default function Favorites() {
   const [favorites, setFavorites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const onLang = () => setTick((x) => x + 1);
+    window.addEventListener("sd-lang-change", onLang);
+    return () => window.removeEventListener("sd-lang-change", onLang);
+  }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/immutability
@@ -62,32 +70,26 @@ export default function Favorites() {
 
   return (
     <div>
-      <h2 className="page-heading">Favorites</h2>
-      <p className="page-subtext">
-        Files you starred for quick access.
-      </p>
+      <h2 className="page-heading">{t("favoritesTitle")}</h2>
+      <p className="page-subtext">{t("favoritesSub")}</p>
 
-      {error && (
-        <div style={{ color: "#ef4444", marginBottom: 12 }}>{error}</div>
-      )}
+      {error && <div style={{ color: "#ef4444", marginBottom: 12 }}>{error}</div>}
 
       <div className="table-card">
         {loading ? (
-          <div style={{ padding: 24, textAlign: "center" }}>Loading…</div>
+          <div style={{ padding: 24, textAlign: "center" }}>{t("loading")}</div>
         ) : favorites.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-title">No favorites yet</div>
-            <div className="empty-state-text">
-              Star a file from My Files to see it here.
-            </div>
+            <div className="empty-state-title">{t("noFavorites")}</div>
+            <div className="empty-state-text">{t("noFavoritesHint")}</div>
           </div>
         ) : (
           <table className="data-table">
             <thead>
               <tr>
-                <th>File Name</th>
-                <th>Added</th>
-                <th style={{ textAlign: "right" }}>Actions</th>
+                <th>{t("fileName")}</th>
+                <th>{t("added")}</th>
+                <th style={{ textAlign: "right" }}>{t("actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -97,11 +99,8 @@ export default function Favorites() {
                   <td>{formatDate(item.created_at)}</td>
                   <td>
                     <div className="row-actions">
-                      <button
-                        className="btn btn-outline"
-                        onClick={() => handleRemove(item)}
-                      >
-                        Remove
+                      <button className="btn btn-outline" onClick={() => handleRemove(item)}>
+                        {t("remove")}
                       </button>
                     </div>
                   </td>

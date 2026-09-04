@@ -1,16 +1,22 @@
 import { useEffect, useState } from "react";
 import { useOutletContext, useNavigate } from "react-router-dom";
+import { t } from "../i18n.js";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
 export default function SystemSettings() {
   const { user } = useOutletContext();
   const navigate = useNavigate();
-
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [, setTick] = useState(0);
 
-  // Super Admin only
+  useEffect(() => {
+    const onLang = () => setTick((x) => x + 1);
+    window.addEventListener("sd-lang-change", onLang);
+    return () => window.removeEventListener("sd-lang-change", onLang);
+  }, []);
+
   useEffect(() => {
     if (user && user.role !== "Super Admin") {
       navigate("/admin/dashboard");
@@ -28,7 +34,7 @@ export default function SystemSettings() {
         const data = await res.json();
         if (res.ok) setStats(data.stats || null);
       } catch {
-        // ignore — page still shows static info
+        /* ignore */
       } finally {
         setLoading(false);
       }
@@ -45,69 +51,63 @@ export default function SystemSettings() {
 
   return (
     <div>
-      <h2 className="page-heading">System Settings</h2>
-      <p className="page-subtext">
-        Global configuration and platform information (Super Admin only).
-      </p>
+      <h2 className="page-heading">{t("systemSettings")}</h2>
+      <p className="page-subtext">{t("settingsSub")}</p>
 
       <div className="dashboard-grid" style={{ marginTop: 8 }}>
-        {/* Platform */}
         <div className="panel">
           <div className="panel-header">
-            <span className="panel-title">Platform</span>
+            <span className="panel-title">{t("platform")}</span>
           </div>
-          <InfoRow label="Application" value="SecureDrive" />
-          <InfoRow label="Environment" value="Development" />
-          <InfoRow label="Frontend" value="React + Vite" />
-          <InfoRow label="Backend" value="Node.js + Express" />
-          <InfoRow label="Database" value="PostgreSQL (Neon)" />
+          <InfoRow label={t("application")} value="SecureDrive" />
+          <InfoRow label={t("environment")} value={t("development")} />
+          <InfoRow label={t("frontend")} value="React + Vite" />
+          <InfoRow label={t("backend")} value="Node.js + Express" />
+          <InfoRow label={t("database")} value="PostgreSQL (Neon)" />
         </div>
 
-        {/* Storage */}
         <div className="panel">
           <div className="panel-header">
-            <span className="panel-title">Storage (S3)</span>
+            <span className="panel-title">{t("storageS3")}</span>
           </div>
-          <InfoRow label="Provider" value="Amazon S3" />
-          <InfoRow label="Bucket" value="drivetentee" />
-          <InfoRow label="Encryption" value="AES-256 (SSE-S3)" />
-          <InfoRow label="Access model" value="Backend proxy (Method 2)" />
+          <InfoRow label={t("provider")} value="Amazon S3" />
+          <InfoRow label={t("bucket")} value="drivetentee" />
+          <InfoRow label={t("encryption")} value="AES-256 (SSE-S3)" />
+          <InfoRow label={t("accessModel")} value={t("backendProxy")} />
           <InfoRow
-            label="Files in S3"
+            label={t("filesInS3")}
             value={loading ? "…" : stats ? String(stats.filesCount) : "—"}
           />
           <InfoRow
-            label="Storage used"
+            label={t("storageUsed")}
             value={loading ? "…" : stats ? formatBytes(stats.storageBytes) : "—"}
           />
         </div>
 
-        {/* Security */}
         <div className="panel">
           <div className="panel-header">
-            <span className="panel-title">Security</span>
+            <span className="panel-title">{t("security")}</span>
           </div>
-          <InfoRow label="Authentication" value="JWT + bcrypt" />
-          <InfoRow label="Session" value="Token ~8 hours" />
-          <InfoRow label="File isolation" value="uploads/{userId}/" />
-          <InfoRow label="Share permissions" value="Read Only / Read & Write" />
-          <InfoRow label="AssumeRole (STS)" value="Pending IAM setup" />
+          <InfoRow label={t("authentication")} value="JWT + bcrypt" />
+          <InfoRow label={t("session")} value={t("tokenHours")} />
+          <InfoRow label={t("fileIsolation")} value="uploads/{userId}/" />
+          <InfoRow label={t("sharePermissions")} value={t("readOnlyReadWrite")} />
+          <InfoRow label={t("assumeRole")} value={t("pendingIam")} />
         </div>
 
-        {/* Roles */}
         <div className="panel">
           <div className="panel-header">
-            <span className="panel-title">Application roles</span>
+            <span className="panel-title">{t("appRoles")}</span>
           </div>
-          <InfoRow label="Super Admin" value="Full access + settings" />
-          <InfoRow label="Manager" value="Users + files + activity" />
-          <InfoRow label="User" value="Own files + shares" />
+          <InfoRow label="Super Admin" value={t("roleSuperAdmin")} />
+          <InfoRow label="Manager" value={t("roleManager")} />
+          <InfoRow label="User" value={t("roleUser")} />
           <InfoRow
-            label="Total users"
+            label={t("totalUsers")}
             value={loading ? "…" : stats ? String(stats.totalUsers) : "—"}
           />
           <InfoRow
-            label="Active accounts"
+            label={t("activeAccounts")}
             value={loading ? "…" : stats ? String(stats.activeAccounts) : "—"}
           />
         </div>
@@ -115,13 +115,10 @@ export default function SystemSettings() {
 
       <div className="panel" style={{ marginTop: 16 }}>
         <div className="panel-header">
-          <span className="panel-title">Notes</span>
+          <span className="panel-title">{t("notes")}</span>
         </div>
         <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", margin: 0 }}>
-          System Settings displays current platform configuration. Editable
-          options (quotas, allowed file types, password policy) can be added
-          later. AssumeRole will be enabled once the AWS IAM role ARN is
-          provided by the administrator.
+          {t("settingsNotes")}
         </p>
       </div>
     </div>

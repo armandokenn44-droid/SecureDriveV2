@@ -1,17 +1,23 @@
 import { useEffect, useState } from "react";
 import { useOutletContext, useNavigate } from "react-router-dom";
+import { t } from "../i18n.js";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
 export default function ActivityLog() {
   const { user } = useOutletContext();
   const navigate = useNavigate();
-
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [, setTick] = useState(0);
 
-  // Seuls Super Admin et Manager ont accès
+  useEffect(() => {
+    const onLang = () => setTick((x) => x + 1);
+    window.addEventListener("sd-lang-change", onLang);
+    return () => window.removeEventListener("sd-lang-change", onLang);
+  }, []);
+
   useEffect(() => {
     if (user && user.role !== "Super Admin" && user.role !== "Manager") {
       navigate("/admin/dashboard");
@@ -36,7 +42,6 @@ export default function ActivityLog() {
         setError(data.error || "Could not load activity log");
         return;
       }
-      // On force la lecture directe de user_name renvoyé par le backend
       setActivities(data.activities || []);
     } catch {
       setError("Cannot connect to server");
@@ -56,19 +61,15 @@ export default function ActivityLog() {
   }
 
   function displayUser(a) {
-    // user_name doit déjà être un vrai email venant du backend.
-    // Ce filet de sécurité n'affiche "User #id" QUE si vraiment rien n'est venu.
-    if (a.user_name && a.user_name.trim().length > 0) {
-      return a.user_name;
-    }
+    if (a.user_name && a.user_name.trim().length > 0) return a.user_name;
     return a.user_id ? `User #${a.user_id}` : "System";
   }
 
   return (
     <div>
-      <h2 className="page-heading">Activity Log</h2>
+      <h2 className="page-heading">{t("activityLogTitle")}</h2>
       <p className="page-subtext">
-        Recent actions across SecureDrive ({activities.length} entries).
+        {t("activityLogSub")} ({activities.length} {t("entries")}).
       </p>
 
       {error && (
@@ -79,22 +80,20 @@ export default function ActivityLog() {
 
       <div className="table-card">
         {loading ? (
-          <div style={{ padding: 24, textAlign: "center" }}>Loading…</div>
+          <div style={{ padding: 24, textAlign: "center" }}>{t("loading")}</div>
         ) : activities.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-title">No activity yet</div>
-            <div className="empty-state-text">
-              Upload a file or share a document — actions will appear here.
-            </div>
+            <div className="empty-state-title">{t("noActivityTitle")}</div>
+            <div className="empty-state-text">{t("noActivityHint")}</div>
           </div>
         ) : (
           <table className="data-table">
             <thead>
               <tr>
-                <th>User</th>
-                <th>Action</th>
-                <th>Detail</th>
-                <th>Date</th>
+                <th>{t("user")}</th>
+                <th>{t("action")}</th>
+                <th>{t("detail")}</th>
+                <th>{t("date")}</th>
               </tr>
             </thead>
             <tbody>
@@ -102,9 +101,7 @@ export default function ActivityLog() {
                 <tr key={a.id}>
                   <td style={{ fontWeight: 600 }}>{displayUser(a)}</td>
                   <td>{a.action}</td>
-                  <td style={{ color: "var(--text-secondary)" }}>
-                    {a.detail || "—"}
-                  </td>
+                  <td style={{ color: "var(--text-secondary)" }}>{a.detail || "—"}</td>
                   <td>{formatDateTime(a.created_at)}</td>
                 </tr>
               ))}

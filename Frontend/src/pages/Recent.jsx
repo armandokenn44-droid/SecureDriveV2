@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { t } from "../i18n.js";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
@@ -18,6 +19,13 @@ export default function Recent() {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const onLang = () => setTick((x) => x + 1);
+    window.addEventListener("sd-lang-change", onLang);
+    return () => window.removeEventListener("sd-lang-change", onLang);
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -45,32 +53,26 @@ export default function Recent() {
 
   return (
     <div>
-      <h2 className="page-heading">Recent</h2>
-      <p className="page-subtext">
-        Your most recently modified files.
-      </p>
+      <h2 className="page-heading">{t("recentTitle")}</h2>
+      <p className="page-subtext">{t("recentSub")}</p>
 
-      {error && (
-        <div style={{ color: "#ef4444", marginBottom: 12 }}>{error}</div>
-      )}
+      {error && <div style={{ color: "#ef4444", marginBottom: 12 }}>{error}</div>}
 
       <div className="table-card">
         {loading ? (
-          <div style={{ padding: 24, textAlign: "center" }}>Loading…</div>
+          <div style={{ padding: 24, textAlign: "center" }}>{t("loading")}</div>
         ) : files.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-title">No recent files</div>
-            <div className="empty-state-text">
-              Files you upload or modify will appear here.
-            </div>
+            <div className="empty-state-title">{t("noRecent")}</div>
+            <div className="empty-state-text">{t("noRecentHint")}</div>
           </div>
         ) : (
           <table className="data-table">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Size</th>
-                <th>Last Modified</th>
+                <th>{t("name")}</th>
+                <th>{t("size")}</th>
+                <th>{t("lastModified")}</th>
               </tr>
             </thead>
             <tbody>

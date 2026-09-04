@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { t } from "../i18n.js";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
@@ -24,14 +25,20 @@ export default function SharedWithMe() {
   const [replacingId, setReplacingId] = useState(null);
   const fileInputRef = useRef(null);
   const pendingReplaceRef = useRef(null);
+  const [, setTick] = useState(0);
 
-  // Navigation dans un dossier partagé
-  const [browsePath, setBrowsePath] = useState(null); // null = liste des shares
+  const [browsePath, setBrowsePath] = useState(null);
   const [browseName, setBrowseName] = useState("");
   const [folderFiles, setFolderFiles] = useState([]);
   const [folderFolders, setFolderFolders] = useState([]);
   const [browseLoading, setBrowseLoading] = useState(false);
   const [browsePerm, setBrowsePerm] = useState("Read Only");
+
+  useEffect(() => {
+    const onLang = () => setTick((x) => x + 1);
+    window.addEventListener("sd-lang-change", onLang);
+    return () => window.removeEventListener("sd-lang-change", onLang);
+  }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/immutability
@@ -175,13 +182,18 @@ export default function SharedWithMe() {
     return item.isFolder === true || (item.file_key && item.file_key.endsWith("/"));
   }
 
-  // Vue : contenu d'un dossier partagé
+  function permLabel(p) {
+    if (p === "Read Only") return t("readOnly");
+    if (p === "Read & Write") return t("readWrite");
+    return p;
+  }
+
   if (browsePath) {
     return (
       <div>
         <h2 className="page-heading">📁 {browseName}</h2>
         <p className="page-subtext">
-          Shared folder · {browsePerm}
+          {t("sharedFolderLabel")} · {permLabel(browsePerm)}
         </p>
         <button
           type="button"
@@ -189,25 +201,25 @@ export default function SharedWithMe() {
           style={{ marginBottom: 16 }}
           onClick={backToShares}
         >
-          ← Back to Shared with me
+          ← {t("backToShared")}
         </button>
 
         {error && <div style={{ color: "#ef4444", marginBottom: 12 }}>{error}</div>}
 
         <div className="table-card">
           {browseLoading ? (
-            <div style={{ padding: 24, textAlign: "center" }}>Loading…</div>
+            <div style={{ padding: 24, textAlign: "center" }}>{t("loading")}</div>
           ) : folderFolders.length === 0 && folderFiles.length === 0 ? (
             <div className="empty-state">
-              <div className="empty-state-title">This folder is empty</div>
+              <div className="empty-state-title">{t("emptyFolder")}</div>
             </div>
           ) : (
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Size</th>
-                  <th style={{ textAlign: "right" }}>Actions</th>
+                  <th>{t("name")}</th>
+                  <th>{t("size")}</th>
+                  <th style={{ textAlign: "right" }}>{t("actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -228,7 +240,7 @@ export default function SharedWithMe() {
                           })
                         }
                       >
-                        Open
+                        {t("open")}
                       </button>
                     </td>
                   </tr>
@@ -241,7 +253,7 @@ export default function SharedWithMe() {
                       <button
                         type="button"
                         className="icon-btn"
-                        title="Download"
+                        title={t("download")}
                         onClick={() => handleDownload(f.key, f.name)}
                       >
                         <DownloadIcon />
@@ -251,11 +263,9 @@ export default function SharedWithMe() {
                           type="button"
                           className="btn btn-outline"
                           style={{ marginLeft: 6, fontSize: "0.8rem" }}
-                          onClick={() =>
-                            startReplace({ file_key: f.key, id: f.key })
-                          }
+                          onClick={() => startReplace({ file_key: f.key, id: f.key })}
                         >
-                          Update
+                          {t("update")}
                         </button>
                       )}
                     </td>
@@ -271,13 +281,10 @@ export default function SharedWithMe() {
     );
   }
 
-  // Vue : liste des partages
   return (
     <div>
-      <h2 className="page-heading">Shared With Me</h2>
-      <p className="page-subtext">
-        Files and folders that other team members shared with you.
-      </p>
+      <h2 className="page-heading">{t("sharedWithMeTitle")}</h2>
+      <p className="page-subtext">{t("sharedWithMeSub")}</p>
 
       <input ref={fileInputRef} type="file" hidden onChange={onFileChosen} />
 
@@ -285,26 +292,24 @@ export default function SharedWithMe() {
 
       <div className="table-card">
         {loading ? (
-          <div style={{ padding: 24, textAlign: "center" }}>Loading…</div>
+          <div style={{ padding: 24, textAlign: "center" }}>{t("loading")}</div>
         ) : shares.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon">
               <ShareIcon />
             </div>
-            <div className="empty-state-title">Nothing shared with you yet</div>
-            <div className="empty-state-text">
-              Files and folders shared by teammates will show up here.
-            </div>
+            <div className="empty-state-title">{t("nothingShared")}</div>
+            <div className="empty-state-text">{t("nothingSharedHint")}</div>
           </div>
         ) : (
           <table className="data-table">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Shared By</th>
-                <th>Permissions</th>
-                <th>Date Shared</th>
-                <th style={{ textAlign: "right" }}>Actions</th>
+                <th>{t("name")}</th>
+                <th>{t("sharedBy")}</th>
+                <th>{t("permissions")}</th>
+                <th>{t("dateShared")}</th>
+                <th style={{ textAlign: "right" }}>{t("actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -323,7 +328,7 @@ export default function SharedWithMe() {
                             color: "#64748b",
                           }}
                         >
-                          Folder
+                          {t("folder")}
                         </span>
                       )}
                     </td>
@@ -344,7 +349,7 @@ export default function SharedWithMe() {
                           item.permission === "Read Only" ? "tag-gray" : "tag-amber"
                         }`}
                       >
-                        {item.permission}
+                        {permLabel(item.permission)}
                       </span>
                     </td>
                     <td>{formatDate(item.created_at)}</td>
@@ -357,13 +362,13 @@ export default function SharedWithMe() {
                             style={{ fontSize: "0.8rem" }}
                             onClick={() => openSharedFolder(item)}
                           >
-                            Open folder
+                            {t("openFolder")}
                           </button>
                         ) : (
                           <>
                             <button
                               className="icon-btn"
-                              title="Download"
+                              title={t("download")}
                               onClick={() =>
                                 handleDownload(item.file_key, item.file_name)
                               }
@@ -373,12 +378,14 @@ export default function SharedWithMe() {
                             {item.permission === "Read & Write" && (
                               <button
                                 className="btn btn-outline"
-                                title="Replace file"
+                                title={t("updateFile")}
                                 disabled={replacingId === item.id}
                                 onClick={() => startReplace(item)}
                                 style={{ marginLeft: 6, fontSize: "0.8rem" }}
                               >
-                                {replacingId === item.id ? "Updating…" : "Update file"}
+                                {replacingId === item.id
+                                  ? t("updating")
+                                  : t("updateFile")}
                               </button>
                             )}
                           </>

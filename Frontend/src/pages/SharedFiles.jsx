@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { t } from "../i18n.js";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
@@ -6,6 +7,13 @@ export default function SharedFiles() {
   const [shares, setShares] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const onLang = () => setTick((x) => x + 1);
+    window.addEventListener("sd-lang-change", onLang);
+    return () => window.removeEventListener("sd-lang-change", onLang);
+  }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/immutability
@@ -56,39 +64,37 @@ export default function SharedFiles() {
     return new Date(dateStr).toLocaleDateString("fr-FR");
   }
 
+  function permLabel(p) {
+    if (p === "Read Only") return t("readOnly");
+    if (p === "Read & Write") return t("readWrite");
+    return p;
+  }
+
   return (
     <div>
-      <h2 className="page-heading">Shared By Me</h2>
-      <p className="page-subtext">
-        Files and folders you've shared with other team members.
-      </p>
+      <h2 className="page-heading">{t("sharedByMeTitle")}</h2>
+      <p className="page-subtext">{t("sharedByMeSub")}</p>
 
-      {error && (
-        <div style={{ color: "#ef4444", marginBottom: 12 }}>{error}</div>
-      )}
+      {error && <div style={{ color: "#ef4444", marginBottom: 12 }}>{error}</div>}
 
       <div className="table-card">
         {loading ? (
-          <div style={{ padding: 24, textAlign: "center" }}>Loading…</div>
+          <div style={{ padding: 24, textAlign: "center" }}>{t("loading")}</div>
         ) : shares.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-icon">
-              <SendIcon />
-            </div>
-            <div className="empty-state-title">You haven't shared anything yet</div>
-            <div className="empty-state-text">
-              Files you share with teammates will show up here.
-            </div>
+            <div className="empty-state-icon"><SendIcon /></div>
+            <div className="empty-state-title">{t("nothingSharedByMe")}</div>
+            <div className="empty-state-text">{t("nothingSharedByMeHint")}</div>
           </div>
         ) : (
           <table className="data-table">
             <thead>
               <tr>
-                <th>File Name</th>
-                <th>Shared With</th>
-                <th>Permissions</th>
-                <th>Date Shared</th>
-                <th style={{ textAlign: "right" }}>Actions</th>
+                <th>{t("fileName")}</th>
+                <th>{t("sharedWith")}</th>
+                <th>{t("permissions")}</th>
+                <th>{t("dateShared")}</th>
+                <th style={{ textAlign: "right" }}>{t("actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -107,7 +113,7 @@ export default function SharedFiles() {
                         item.permission === "Read Only" ? "tag-gray" : "tag-amber"
                       }`}
                     >
-                      {item.permission}
+                      {permLabel(item.permission)}
                     </span>
                   </td>
                   <td>{formatDate(item.created_at)}</td>
@@ -117,7 +123,7 @@ export default function SharedFiles() {
                         className="btn btn-outline"
                         onClick={() => handleRemoveShare(item.id)}
                       >
-                        Remove access
+                        {t("removeAccess")}
                       </button>
                     </div>
                   </td>

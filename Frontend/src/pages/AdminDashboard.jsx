@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useOutletContext, useNavigate } from "react-router-dom";
+import { t } from "../i18n.js";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
@@ -31,11 +32,18 @@ function formatDateTime(value) {
 export default function AdminDashboard() {
   const { user } = useOutletContext();
   const navigate = useNavigate();
+  const [, setTick] = useState(0);
 
   const [data, setData] = useState(null);
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const onLang = () => setTick((x) => x + 1);
+    window.addEventListener("sd-lang-change", onLang);
+    return () => window.removeEventListener("sd-lang-change", onLang);
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -75,8 +83,10 @@ export default function AdminDashboard() {
   if (loading) {
     return (
       <div>
-        <h2 className="page-heading">Good morning, {user?.firstName} 👋</h2>
-        <p className="page-subtext">Loading dashboard…</p>
+        <h2 className="page-heading">
+          {t("goodMorning")}, {user?.firstName} 👋
+        </h2>
+        <p className="page-subtext">{t("loading")}</p>
       </div>
     );
   }
@@ -84,7 +94,9 @@ export default function AdminDashboard() {
   if (error || !data) {
     return (
       <div>
-        <h2 className="page-heading">Good morning, {user?.firstName} 👋</h2>
+        <h2 className="page-heading">
+          {t("goodMorning")}, {user?.firstName} 👋
+        </h2>
         <p style={{ color: "#ef4444" }}>{error || "No data"}</p>
       </div>
     );
@@ -92,64 +104,35 @@ export default function AdminDashboard() {
 
   const { canSeeUserStats, stats, recentFiles } = data;
 
-  // ========== DASHBOARD USER ==========
   if (!canSeeUserStats) {
     return (
       <div>
-        <h2 className="page-heading">Good morning, {user?.firstName} 👋</h2>
-        <p className="page-subtext">
-          Here's an overview of your SecureDrive workspace.
-        </p>
+        <h2 className="page-heading">
+          {t("goodMorning")}, {user?.firstName} 👋
+        </h2>
+        <p className="page-subtext">{t("dashboardSubUser")}</p>
 
         <div className="stat-grid">
-          <StatCard
-            icon={<FolderIcon />}
-            color="blue"
-            value={stats.filesCount}
-            label="My Files"
-          />
-          <StatCard
-            icon={<ShareIcon />}
-            color="purple"
-            value={stats.sharedWithMe}
-            label="Shared With Me"
-          />
-          <StatCard
-            icon={<StorageIcon />}
-            color="green"
-            value={formatBytes(stats.storageBytes)}
-            label="Storage Used"
-          />
-          <StatCard
-            icon={<StarIcon />}
-            color="amber"
-            value={stats.favoritesCount ?? 0}
-            label="Favorites"
-          />
+          <StatCard icon={<FolderIcon />} color="blue" value={stats.filesCount} label={t("myFiles")} />
+          <StatCard icon={<ShareIcon />} color="purple" value={stats.sharedWithMe} label={t("sharedWithMe")} />
+          <StatCard icon={<StorageIcon />} color="green" value={formatBytes(stats.storageBytes)} label={t("storageUsed")} />
+          <StatCard icon={<StarIcon />} color="amber" value={stats.favoritesCount ?? 0} label={t("favorites")} />
         </div>
 
         <div className="dashboard-grid">
           <div className="panel">
             <div className="panel-header">
-              <span className="panel-title">Recent Files</span>
-              <span
-                className="panel-link"
-                style={{ cursor: "pointer" }}
-                onClick={() => navigate("/admin/files")}
-              >
-                View all →
+              <span className="panel-title">{t("recentFiles")}</span>
+              <span className="panel-link" style={{ cursor: "pointer" }} onClick={() => navigate("/admin/files")}>
+                {t("viewAll")} →
               </span>
             </div>
             {recentFiles.length === 0 ? (
-              <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-                No files yet.
-              </p>
+              <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>{t("noFilesYet")}</p>
             ) : (
               recentFiles.map((file) => (
                 <div className="activity-row" key={file.key}>
-                  <div className="activity-text">
-                    <b>{file.name}</b>
-                  </div>
+                  <div className="activity-text"><b>{file.name}</b></div>
                   <div className="activity-time">
                     {formatBytes(file.size)} · {formatDate(file.lastModified)}
                   </div>
@@ -160,22 +143,14 @@ export default function AdminDashboard() {
 
           <div className="panel">
             <div className="panel-header">
-              <span className="panel-title">Storage</span>
+              <span className="panel-title">{t("storage")}</span>
             </div>
             <div style={{ padding: "8px 0" }}>
-              <div style={{ fontSize: "1.4rem", fontWeight: 700 }}>
-                {formatBytes(stats.storageBytes)}
-              </div>
-              <div style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>
-                of 25 GB used
-              </div>
+              <div style={{ fontSize: "1.4rem", fontWeight: 700 }}>{formatBytes(stats.storageBytes)}</div>
+              <div style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>{t("of25gb")}</div>
             </div>
-            <button
-              className="btn btn-solid"
-              style={{ marginTop: 16 }}
-              onClick={() => navigate("/admin/files")}
-            >
-              Go to My Files
+            <button className="btn btn-solid" style={{ marginTop: 16 }} onClick={() => navigate("/admin/files")}>
+              {t("goToMyFiles")}
             </button>
           </div>
         </div>
@@ -183,63 +158,34 @@ export default function AdminDashboard() {
     );
   }
 
-  // ========== DASHBOARD ADMIN / MANAGER ==========
   return (
     <div>
-      <h2 className="page-heading">Good morning, {user?.firstName} 👋</h2>
-      <p className="page-subtext">
-        Here's what's happening across SecureDrive today.
-      </p>
+      <h2 className="page-heading">
+        {t("goodMorning")}, {user?.firstName} 👋
+      </h2>
+      <p className="page-subtext">{t("dashboardSub")}</p>
 
       <div className="stat-grid">
-        <StatCard
-          icon={<UsersIcon />}
-          color="blue"
-          value={stats.totalUsers}
-          label="Total Users"
-        />
-        <StatCard
-          icon={<CheckIcon />}
-          color="green"
-          value={stats.activeAccounts}
-          label="Active Accounts"
-        />
-        <StatCard
-          icon={<StorageIcon />}
-          color="purple"
-          value={stats.filesCount}
-          label="Files in S3"
-        />
-        <StatCard
-          icon={<PulseIcon />}
-          color="amber"
-          value={formatBytes(stats.storageBytes)}
-          label="Storage Used"
-        />
+        <StatCard icon={<UsersIcon />} color="blue" value={stats.totalUsers} label={t("totalUsers")} />
+        <StatCard icon={<CheckIcon />} color="green" value={stats.activeAccounts} label={t("activeAccounts")} />
+        <StatCard icon={<StorageIcon />} color="purple" value={stats.filesCount} label={t("filesInS3")} />
+        <StatCard icon={<PulseIcon />} color="amber" value={formatBytes(stats.storageBytes)} label={t("storageUsed")} />
       </div>
 
       <div className="dashboard-grid">
         <div className="panel">
           <div className="panel-header">
-            <span className="panel-title">Recent Files</span>
-            <span
-              className="panel-link"
-              style={{ cursor: "pointer" }}
-              onClick={() => navigate("/admin/files")}
-            >
-              View all →
+            <span className="panel-title">{t("recentFiles")}</span>
+            <span className="panel-link" style={{ cursor: "pointer" }} onClick={() => navigate("/admin/files")}>
+              {t("viewAll")} →
             </span>
           </div>
           {recentFiles.length === 0 ? (
-            <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-              No files yet.
-            </p>
+            <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>{t("noFilesYet")}</p>
           ) : (
             recentFiles.map((file) => (
               <div className="activity-row" key={file.key}>
-                <div className="activity-text">
-                  <b>{file.name}</b>
-                </div>
+                <div className="activity-text"><b>{file.name}</b></div>
                 <div className="activity-time">
                   {formatBytes(file.size)} · {formatDate(file.lastModified)}
                 </div>
@@ -250,30 +196,21 @@ export default function AdminDashboard() {
 
         <div className="panel">
           <div className="panel-header">
-            <span className="panel-title">Recent Activity</span>
-            <span
-              className="panel-link"
-              style={{ cursor: "pointer" }}
-              onClick={() => navigate("/admin/activity")}
-            >
-              View all →
+            <span className="panel-title">{t("recentActivity")}</span>
+            <span className="panel-link" style={{ cursor: "pointer" }} onClick={() => navigate("/admin/activity")}>
+              {t("viewAll")} →
             </span>
           </div>
           {activities.length === 0 ? (
-            <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-              No activity yet.
-            </p>
+            <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>{t("noActivityYet")}</p>
           ) : (
             activities.map((a) => (
               <div className="activity-row" key={a.id}>
                 <div className="activity-text">
-                  <b>{a.user_name || (a.user_id ? `User #${a.user_id}` : "User")}</b>{" "}
-                  {a.action}
+                  <b>{a.user_name || (a.user_id ? `User #${a.user_id}` : "User")}</b> {a.action}
                   {a.detail ? ` — ${a.detail}` : ""}
                 </div>
-                <div className="activity-time">
-                  {formatDateTime(a.created_at)}
-                </div>
+                <div className="activity-time">{formatDateTime(a.created_at)}</div>
               </div>
             ))
           )}
@@ -294,16 +231,8 @@ function StatCard({ icon, color, value, label }) {
 }
 
 function iconProps() {
-  return {
-    width: 19,
-    height: 19,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 2,
-  };
+  return { width: 19, height: 19, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 };
 }
-
 function UsersIcon() {
   return (
     <svg {...iconProps()}>

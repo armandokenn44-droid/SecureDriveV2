@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { t, getLang, setLang } from "../i18n.js";
 import "./Login.css";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
@@ -12,6 +13,13 @@ export default function Login() {
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const onLang = () => setTick((x) => x + 1);
+    window.addEventListener("sd-lang-change", onLang);
+    return () => window.removeEventListener("sd-lang-change", onLang);
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -48,6 +56,8 @@ export default function Login() {
     }
   }
 
+  const lang = getLang();
+
   return (
     <div className="login-screen">
       <div className="login-panel-left">
@@ -59,7 +69,7 @@ export default function Login() {
             <div className="login-brand-name">
               Secure<span>Drive</span>
             </div>
-            <div className="login-brand-tagline">Enterprise File Platform</div>
+            <div className="login-brand-tagline">{t("enterpriseTagline")}</div>
           </div>
         </div>
 
@@ -69,36 +79,50 @@ export default function Login() {
           <span className="login-badge">AUDIT</span>
         </div>
 
-        <h1 className="login-headline">
-          Enterprise-grade file security, built for your team.
-        </h1>
-        <p className="login-description">
-          Self-hosted secure file management with role-based access control,
-          end-to-end encryption, and complete audit logging.
-        </p>
+        <h1 className="login-headline">{t("loginHeadline")}</h1>
+        <p className="login-description">{t("loginDescription")}</p>
 
         <div className="login-stats">
           <div>
             <div className="login-stat-value">2.4M+</div>
-            <div className="login-stat-label">Files Protected</div>
+            <div className="login-stat-label">{t("filesProtected")}</div>
           </div>
           <div>
             <div className="login-stat-value">340</div>
-            <div className="login-stat-label">Active Users</div>
+            <div className="login-stat-label">{t("activeUsersLabel")}</div>
           </div>
           <div>
             <div className="login-stat-value">99.9%</div>
-            <div className="login-stat-label">Uptime SLA</div>
+            <div className="login-stat-label">{t("uptimeSla")}</div>
           </div>
         </div>
       </div>
 
       <div className="login-panel-right">
-        <form className="login-form" onSubmit={handleSubmit}>
-          <h2 className="login-form-title">Welcome back</h2>
-          <p className="login-form-subtitle">Sign in to your SecureDrive account</p>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 12 }}>
+          <button
+            type="button"
+            className="btn btn-outline"
+            style={{ padding: "4px 10px", fontWeight: lang === "en" ? 700 : 400 }}
+            onClick={() => setLang("en")}
+          >
+            EN
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline"
+            style={{ padding: "4px 10px", fontWeight: lang === "fr" ? 700 : 400 }}
+            onClick={() => setLang("fr")}
+          >
+            FR
+          </button>
+        </div>
 
-          <label className="login-label">Corporate Email</label>
+        <form className="login-form" onSubmit={handleSubmit}>
+          <h2 className="login-form-title">{t("welcomeBack")}</h2>
+          <p className="login-form-subtitle">{t("signInSubtitle")}</p>
+
+          <label className="login-label">{t("corporateEmail")}</label>
           <div className="login-input-wrap">
             <MailIcon />
             <input
@@ -110,7 +134,7 @@ export default function Login() {
             />
           </div>
 
-          <label className="login-label">Password</label>
+          <label className="login-label">{t("password")}</label>
           <div className="login-input-wrap">
             <LockIcon />
             <input
@@ -124,7 +148,7 @@ export default function Login() {
               type="button"
               className="login-eye-btn"
               onClick={() => setShowPassword((s) => !s)}
-              aria-label="Toggle password visibility"
+              aria-label="Toggle password"
             >
               <EyeIcon off={showPassword} />
             </button>
@@ -137,14 +161,14 @@ export default function Login() {
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
               />
-              Remember this device
+              {t("rememberDevice")}
             </label>
             <button
               type="button"
               className="forgot-password-link"
               onClick={() => navigate("/forgot-password")}
             >
-              Forgot password?
+              {t("forgotPasswordLink")}
             </button>
           </div>
 
@@ -155,15 +179,16 @@ export default function Login() {
           )}
 
           <button type="submit" className="login-submit-btn" disabled={loading}>
-            {loading ? "Signing in..." : "Sign In"}
+            {loading ? t("signingIn") : t("signIn")}
           </button>
 
           <div className="login-security-note">
-            <LockIcon small /> Secured with TLS 1.3 · End-to-end encrypted · RBAC enforced
+            <LockIcon small /> {t("securedNote")}
           </div>
 
           <p className="login-footer-note">
-            Don't have an account? Contact your <a href="#contact">IT Administrator</a>
+            {t("noAccount")}{" "}
+            <a href="#contact">{t("itAdmin")}</a>
           </p>
         </form>
       </div>
@@ -178,7 +203,6 @@ function ShieldIcon() {
     </svg>
   );
 }
-
 function MailIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
@@ -187,7 +211,6 @@ function MailIcon() {
     </svg>
   );
 }
-
 function LockIcon({ small }) {
   const s = small ? 12 : 16;
   return (
@@ -197,7 +220,6 @@ function LockIcon({ small }) {
     </svg>
   );
 }
-
 function EyeIcon({ off }) {
   return off ? (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">

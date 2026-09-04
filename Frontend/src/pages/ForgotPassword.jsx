@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { t } from "../i18n.js";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
@@ -34,7 +35,7 @@ const inputStyle = {
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
-  const [step, setStep] = useState(1); // 1 email · 2 code · 3 password
+  const [step, setStep] = useState(1);
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -43,14 +44,20 @@ export default function ForgotPassword() {
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [cooldown, setCooldown] = useState(0);
+  const [, setTick] = useState(0);
 
-  // Compteur 5 min avant de redemander un code
+  useEffect(() => {
+    const onLang = () => setTick((x) => x + 1);
+    window.addEventListener("sd-lang-change", onLang);
+    return () => window.removeEventListener("sd-lang-change", onLang);
+  }, []);
+
   function startCooldown() {
-    setCooldown(300); // 5 minutes = 300 secondes
-    const t = setInterval(() => {
+    setCooldown(300);
+    const timer = setInterval(() => {
       setCooldown((s) => {
         if (s <= 1) {
-          clearInterval(t);
+          clearInterval(timer);
           return 0;
         }
         return s - 1;
@@ -79,7 +86,7 @@ export default function ForgotPassword() {
         setError(data.error || "Could not send code");
         return false;
       }
-      setInfo("If an account exists, a code was sent. Check the backend console (dev mode).");
+      setInfo(t("codeSentInfo"));
       startCooldown();
       return true;
     } catch {
@@ -129,11 +136,11 @@ export default function ForgotPassword() {
     e.preventDefault();
     setError("");
     if (newPassword !== confirm) {
-      setError("Passwords do not match");
+      setError(t("passwordsMatch"));
       return;
     }
     if (newPassword.length < 8) {
-      setError("Password must be at least 8 characters");
+      setError(t("reqLength"));
       return;
     }
     setLoading(true);
@@ -152,7 +159,7 @@ export default function ForgotPassword() {
         setError(data.error || "Could not update password");
         return;
       }
-      setInfo("Password updated. Redirecting to login…");
+      setInfo(t("passwordUpdatedRedirect"));
       setTimeout(() => navigate("/login"), 1500);
     } catch {
       setError("Cannot connect to server");
@@ -164,15 +171,14 @@ export default function ForgotPassword() {
   return (
     <div style={box}>
       <div style={card}>
-        <h1 style={{ margin: "0 0 6px", fontSize: "1.4rem" }}>Forgot password</h1>
+        <h1 style={{ margin: "0 0 6px", fontSize: "1.4rem" }}>{t("forgotTitle")}</h1>
         <p style={{ margin: "0 0 20px", color: "#64748b", fontSize: "0.9rem" }}>
-          Step {step} of 3
+          {t("stepOf")} {step} {t("of")} 3
         </p>
 
-        {/* ——— STEP 1 : EMAIL ——— */}
         {step === 1 && (
           <form onSubmit={handleEmailNext}>
-            <label style={{ fontWeight: 600, fontSize: "0.85rem" }}>Email</label>
+            <label style={{ fontWeight: 600, fontSize: "0.85rem" }}>{t("email")}</label>
             <input
               type="email"
               value={email}
@@ -184,20 +190,19 @@ export default function ForgotPassword() {
             />
             {error && <p style={{ color: "#dc2626", fontSize: "0.9rem" }}>{error}</p>}
             <button type="submit" className="btn btn-solid" disabled={loading} style={{ width: "100%" }}>
-              {loading ? "Sending…" : "Next"}
+              {loading ? t("sending") : t("next")}
             </button>
           </form>
         )}
 
-        {/* ——— STEP 2 : CODE ——— */}
         {step === 2 && (
           <form onSubmit={handleCodeNext}>
             <p style={{ color: "#64748b", fontSize: "0.9rem", marginBottom: 12 }}>
-              We sent a 6-digit code for <b>{email}</b>.
+              {t("codeSentFor")} <b>{email}</b>.
               <br />
-              (In dev mode, the code is in the backend terminal.)
+              {t("devCodeHint")}
             </p>
-            <label style={{ fontWeight: 600, fontSize: "0.85rem" }}>Code</label>
+            <label style={{ fontWeight: 600, fontSize: "0.85rem" }}>{t("code")}</label>
             <input
               type="text"
               value={code}
@@ -212,12 +217,14 @@ export default function ForgotPassword() {
             {error && <p style={{ color: "#dc2626", fontSize: "0.9rem" }}>{error}</p>}
 
             <button type="submit" className="btn btn-solid" disabled={loading} style={{ width: "100%" }}>
-              {loading ? "Checking…" : "Next"}
+              {loading ? t("checking") : t("next")}
             </button>
 
             <p style={{ marginTop: 14, fontSize: "0.85rem", color: "#64748b", textAlign: "center" }}>
               {cooldown > 0 ? (
-                <>Wait {formatTime(cooldown)} before requesting a new code</>
+                <>
+                  {t("waitBeforeResend")} ({formatTime(cooldown)})
+                </>
               ) : (
                 <button
                   type="button"
@@ -231,17 +238,16 @@ export default function ForgotPassword() {
                     textDecoration: "underline",
                   }}
                 >
-                  Resend code
+                  {t("resendCode")}
                 </button>
               )}
             </p>
           </form>
         )}
 
-        {/* ——— STEP 3 : NEW PASSWORD ——— */}
         {step === 3 && (
           <form onSubmit={handleUpdatePassword}>
-            <label style={{ fontWeight: 600, fontSize: "0.85rem" }}>New password</label>
+            <label style={{ fontWeight: 600, fontSize: "0.85rem" }}>{t("newPasswordLabel")}</label>
             <input
               type="password"
               value={newPassword}
@@ -250,7 +256,7 @@ export default function ForgotPassword() {
               style={inputStyle}
               autoFocus
             />
-            <label style={{ fontWeight: 600, fontSize: "0.85rem" }}>Confirm password</label>
+            <label style={{ fontWeight: 600, fontSize: "0.85rem" }}>{t("confirmPasswordLabel")}</label>
             <input
               type="password"
               value={confirm}
@@ -261,14 +267,14 @@ export default function ForgotPassword() {
             {error && <p style={{ color: "#dc2626", fontSize: "0.9rem" }}>{error}</p>}
             {info && <p style={{ color: "#16a34a", fontSize: "0.9rem" }}>{info}</p>}
             <button type="submit" className="btn btn-solid" disabled={loading} style={{ width: "100%" }}>
-              {loading ? "Updating…" : "Update password"}
+              {loading ? t("updating") : t("updatePassword")}
             </button>
           </form>
         )}
 
         <p style={{ marginTop: 20, textAlign: "center" }}>
           <Link to="/login" style={{ color: "#2563eb" }}>
-            Back to login
+            {t("backToLogin")}
           </Link>
         </p>
       </div>

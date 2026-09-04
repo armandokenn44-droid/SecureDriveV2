@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { t } from "../i18n.js";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
@@ -27,9 +28,14 @@ export default function Trash() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-
-  // confirmModal: { type: "restore" | "delete" | "empty", item?: ... }
   const [confirmModal, setConfirmModal] = useState(null);
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const onLang = () => setTick((x) => x + 1);
+    window.addEventListener("sd-lang-change", onLang);
+    return () => window.removeEventListener("sd-lang-change", onLang);
+  }, []);
 
   async function loadTrash() {
     setLoading(true);
@@ -113,7 +119,6 @@ export default function Trash() {
     setBusy(true);
     const token = localStorage.getItem("token");
     try {
-      // Supprime chaque fichier un par un
       for (const item of items) {
         const res = await fetch(`${API_BASE}/api/files`, {
           method: "DELETE",
@@ -148,28 +153,28 @@ export default function Trash() {
 
   const modalTitle =
     confirmModal?.type === "restore"
-      ? "Restore file?"
+      ? t("restoreTitle")
       : confirmModal?.type === "delete"
-      ? "Delete forever?"
-      : confirmModal?.type === "empty"
-      ? "Empty trash?"
-      : "";
+        ? t("deleteForeverTitle")
+        : confirmModal?.type === "empty"
+          ? t("emptyTrashTitle")
+          : "";
 
   const modalText =
     confirmModal?.type === "restore"
-      ? `"${cleanName(confirmModal.item.key)}" will be moved back to My Files.`
+      ? `"${cleanName(confirmModal.item.key)}" ${t("restoreText")}`
       : confirmModal?.type === "delete"
-      ? `"${cleanName(confirmModal.item.key)}" will be permanently deleted. This cannot be undone.`
-      : confirmModal?.type === "empty"
-      ? `All ${items.length} file(s) in trash will be permanently deleted. This cannot be undone.`
-      : "";
+        ? `"${cleanName(confirmModal.item.key)}" ${t("deleteForeverText")}`
+        : confirmModal?.type === "empty"
+          ? `${items.length} ${t("emptyTrashText")}`
+          : "";
 
   const confirmLabel =
     confirmModal?.type === "restore"
-      ? "Restore"
+      ? t("restore")
       : confirmModal?.type === "delete"
-      ? "Delete forever"
-      : "Empty trash";
+        ? t("deleteForever")
+        : t("emptyTrash");
 
   const isDanger =
     confirmModal?.type === "delete" || confirmModal?.type === "empty";
@@ -184,10 +189,8 @@ export default function Trash() {
         }}
       >
         <div>
-          <h2 className="page-heading">Trash</h2>
-          <p className="page-subtext">
-            Files in trash can be restored or permanently deleted.
-          </p>
+          <h2 className="page-heading">{t("trashTitle")}</h2>
+          <p className="page-subtext">{t("trashSub")}</p>
         </div>
 
         {items.length > 0 && (
@@ -195,7 +198,7 @@ export default function Trash() {
             className="btn btn-danger"
             onClick={() => setConfirmModal({ type: "empty" })}
           >
-            Empty trash
+            {t("emptyTrash")}
           </button>
         )}
       </div>
@@ -208,25 +211,21 @@ export default function Trash() {
 
       <div className="table-card">
         {loading ? (
-          <div style={{ padding: 24, textAlign: "center" }}>Loading trash…</div>
+          <div style={{ padding: 24, textAlign: "center" }}>{t("loadingTrash")}</div>
         ) : items.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-icon">
-              <TrashIcon />
-            </div>
-            <div className="empty-state-title">Trash is empty</div>
-            <div className="empty-state-text">
-              Files you delete will appear here before permanent deletion.
-            </div>
+            <div className="empty-state-icon"><TrashIcon /></div>
+            <div className="empty-state-title">{t("trashEmpty")}</div>
+            <div className="empty-state-text">{t("trashEmptyHint")}</div>
           </div>
         ) : (
           <table className="data-table">
             <thead>
               <tr>
-                <th>File Name</th>
-                <th>File Size</th>
-                <th>Deleted Date</th>
-                <th style={{ textAlign: "right" }}>Actions</th>
+                <th>{t("fileName")}</th>
+                <th>{t("fileSize")}</th>
+                <th>{t("deletedDate")}</th>
+                <th style={{ textAlign: "right" }}>{t("actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -239,19 +238,15 @@ export default function Trash() {
                     <div className="row-actions">
                       <button
                         className="btn btn-outline"
-                        onClick={() =>
-                          setConfirmModal({ type: "restore", item })
-                        }
+                        onClick={() => setConfirmModal({ type: "restore", item })}
                       >
-                        ↺ Restore
+                        ↺ {t("restore")}
                       </button>
                       <button
                         className="btn btn-danger"
-                        onClick={() =>
-                          setConfirmModal({ type: "delete", item })
-                        }
+                        onClick={() => setConfirmModal({ type: "delete", item })}
                       >
-                        🗑 Delete
+                        🗑 {t("delete")}
                       </button>
                     </div>
                   </td>
@@ -262,28 +257,25 @@ export default function Trash() {
         )}
       </div>
 
-      {/* Modal de confirmation */}
       {confirmModal && (
         <div className="modal-overlay" onClick={() => !busy && setConfirmModal(null)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="modal-title">{modalTitle}</div>
-            <p style={{ marginBottom: 20, color: "var(--text-secondary)" }}>
-              {modalText}
-            </p>
+            <p style={{ marginBottom: 20, color: "var(--text-secondary)" }}>{modalText}</p>
             <div className="modal-actions">
               <button
                 className="btn btn-outline"
                 disabled={busy}
                 onClick={() => setConfirmModal(null)}
               >
-                Cancel
+                {t("cancel")}
               </button>
               <button
                 className={isDanger ? "btn btn-danger" : "btn btn-solid"}
                 disabled={busy}
                 onClick={handleConfirm}
               >
-                {busy ? "Please wait…" : confirmLabel}
+                {busy ? t("pleaseWait") : confirmLabel}
               </button>
             </div>
           </div>
@@ -295,14 +287,7 @@ export default function Trash() {
 
 function TrashIcon() {
   return (
-    <svg
-      width="26"
-      height="26"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-    >
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" />
     </svg>
   );

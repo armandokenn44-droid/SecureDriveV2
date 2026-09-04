@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useOutletContext } from "react-router-dom";
+import { t } from "../i18n.js";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
@@ -68,7 +69,7 @@ export default function MyFiles() {
   const [folderModal, setFolderModal] = useState(false);
   const [folderName, setFolderName] = useState("");
   const [creating, setCreating] = useState(false);
- const [menu, setMenu] = useState(null);
+  const [menu, setMenu] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [moveModal, setMoveModal] = useState(null);
   const [shareModal, setShareModal] = useState(null);
@@ -76,15 +77,22 @@ export default function MyFiles() {
   const [sharePermission, setSharePermission] = useState("Read Only");
   const [sharing, setSharing] = useState(false);
   const [toasts, setToasts] = useState([]);
+  const [, setTick] = useState(0);
 
   const uploadInputRef = useRef(null);
   const menuPanelRef = useRef(null);
 
+  useEffect(() => {
+    const onLang = () => setTick((x) => x + 1);
+    window.addEventListener("sd-lang-change", onLang);
+    return () => window.removeEventListener("sd-lang-change", onLang);
+  }, []);
+
   function showToast(message, type = "ok") {
     // eslint-disable-next-line react-hooks/purity
     const id = Date.now() + Math.random();
-    setToasts((t) => [...t, { id, message, type }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 5000);
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts((prev) => prev.filter((x) => x.id !== id)), 5000);
   }
 
   async function loadFavorites() {
@@ -148,7 +156,7 @@ export default function MyFiles() {
 
   useEffect(() => {
     function onDoc(e) {
-            if (menuPanelRef.current && !menuPanelRef.current.contains(e.target)) {
+      if (menuPanelRef.current && !menuPanelRef.current.contains(e.target)) {
         if (e.target.closest?.("[data-menu-btn]")) return;
         setMenu(null);
       }
@@ -178,7 +186,7 @@ export default function MyFiles() {
       left = window.innerWidth - menuWidth - 8;
     }
     let top = rect.bottom + gap;
-      const estimatedHeight = isFolder ? 180 : 280;
+    const estimatedHeight = isFolder ? 180 : 280;
     if (top + estimatedHeight > window.innerHeight - 8) {
       top = Math.max(8, rect.top - estimatedHeight - gap);
     }
@@ -299,9 +307,9 @@ export default function MyFiles() {
   function requestDownload(file) {
     setMenu(null);
     setConfirm({
-      title: "Download?",
-      message: `Download "${file.name}"?`,
-      confirmLabel: "Download",
+      title: t("download") + "?",
+      message: `${t("download")} "${file.name}"?`,
+      confirmLabel: t("download"),
       danger: false,
       onConfirm: () => doDownload(file),
     });
@@ -337,11 +345,9 @@ export default function MyFiles() {
   function requestTrash(item, isFolder) {
     setMenu(null);
     setConfirm({
-      title: isFolder ? "Delete folder?" : "Move to trash?",
-      message: isFolder
-        ? `"${item.name}" will be moved to trash.`
-        : `"${item.name}" will be moved to Trash. You can restore it later.`,
-      confirmLabel: isFolder ? "Delete" : "Move to trash",
+      title: isFolder ? t("deleteFolder") + "?" : t("moveToTrash") + "?",
+      message: `"${item.name}"`,
+      confirmLabel: isFolder ? t("deleteFolder") : t("moveToTrash"),
       danger: true,
       onConfirm: () => doTrash(item),
     });
@@ -363,7 +369,7 @@ export default function MyFiles() {
         showToast(data.error || "Could not move to trash", "error");
         return;
       }
-      showToast(`"${item.name}" moved to trash`);
+      showToast(`"${item.name}" → trash`);
       load(path);
     } catch {
       showToast("Cannot connect to server", "error");
@@ -398,55 +404,46 @@ export default function MyFiles() {
       });
       showToast(
         isFav
-          ? `"${file.name}" removed from favorites`
-          : `"${file.name}" added to favorites`
+          ? `"${file.name}" ${t("removeFavorite")}`
+          : `"${file.name}" ${t("addFavorite")}`
       );
     } catch {
       showToast("Cannot connect to server", "error");
     }
   }
 
-  function openMoveModal(item) {
+  async function openMoveModal(item) {
     setMenu(null);
     setMoveModal(item);
+    setMoveFolderOptions([]);
+
+    const token = localStorage.getItem("token");
+    const rootPath = getUserRootPath(user);
+
+    try {
+      const resRoot = await fetch(
+        `${API_BASE}/api/files?path=${encodeURIComponent(rootPath)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const dataRoot = await resRoot.json();
+      const fromRoot = resRoot.ok ? dataRoot.folders || [] : [];
+      const fromHere = folders || [];
+
+      const map = new Map();
+      [...fromRoot, ...fromHere].forEach((f) => {
+        const key = f.key.endsWith("/") ? f.key : `${f.key}/`;
+        map.set(key, { key, name: f.name });
+      });
+      setMoveFolderOptions([...map.values()]);
+    } catch {
+      setMoveFolderOptions(
+        (folders || []).map((f) => ({
+          key: f.key.endsWith("/") ? f.key : `${f.key}/`,
+          name: f.name,
+        }))
+      );
+    }
   }
-// eslint-disable-next-line no-redeclare
-async function openMoveModal(item) {
-  setMenu(null);
-  setMoveModal(item);
-  setMoveFolderOptions([]);
-
-  const token = localStorage.getItem("token");
-  const rootPath = getUserRootPath(user);
-
-  try {
-    // dossiers à la racine (moi, Project, …)
-    const resRoot = await fetch(
-      `${API_BASE}/api/files?path=${encodeURIComponent(rootPath)}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    const dataRoot = await resRoot.json();
-    const fromRoot = resRoot.ok ? dataRoot.folders || [] : [];
-
-    // dossiers du chemin actuel (sous-dossiers)
-    const fromHere = folders || [];
-
-    // fusion sans doublon
-    const map = new Map();
-    [...fromRoot, ...fromHere].forEach((f) => {
-      const key = f.key.endsWith("/") ? f.key : `${f.key}/`;
-      map.set(key, { key, name: f.name });
-    });
-    setMoveFolderOptions([...map.values()]);
-  } catch {
-    setMoveFolderOptions(
-      (folders || []).map((f) => ({
-        key: f.key.endsWith("/") ? f.key : `${f.key}/`,
-        name: f.name,
-      }))
-    );
-  }
-}
 
   async function handleShare(e) {
     e.preventDefault();
@@ -483,11 +480,7 @@ async function openMoveModal(item) {
         showToast(data.error || "Share failed", "error");
         return;
       }
-      showToast(
-        isFolder
-          ? `Folder "${shareModal.name}" shared with ${shareEmail.trim()}`
-          : `"${shareModal.name}" shared with ${shareEmail.trim()}`
-      );
+      showToast(`"${shareModal.name}" → ${shareEmail.trim()}`);
       setShareModal(null);
     } catch {
       showToast("Cannot connect to server", "error");
@@ -499,9 +492,9 @@ async function openMoveModal(item) {
   function doMove(file, destinationPath) {
     setMoveModal(null);
     setConfirm({
-      title: "Move?",
-      message: `Move "${file.name}"?`,
-      confirmLabel: "Move",
+      title: t("move") + "?",
+      message: `${t("move")} "${file.name}"?`,
+      confirmLabel: t("move"),
       danger: false,
       onConfirm: async () => {
         const token = localStorage.getItem("token");
@@ -519,7 +512,7 @@ async function openMoveModal(item) {
             showToast(data.error || "Move failed", "error");
             return;
           }
-          showToast(`"${file.name}" moved`);
+          showToast(`"${file.name}" ${t("move")}`);
           load(path);
         } catch {
           showToast("Cannot connect to server", "error");
@@ -531,47 +524,35 @@ async function openMoveModal(item) {
   const crumbs = breadcrumbParts();
   const root = getUserRootPath(user);
   const canGoUp = path !== root && path.length > root.length;
-const moveDestinations = [];
 
-if (moveModal) {
-  const fileKey = moveModal.key || "";
-  const relative = fileKey.startsWith(root) ? fileKey.slice(root.length) : "";
-  const parts = relative.split("/").filter(Boolean);
-  // parts = ["Project", "file.pdf"] → length 2
+  const moveDestinations = [];
+  if (moveModal) {
+    const fileKey = moveModal.key || "";
+    const relative = fileKey.startsWith(root) ? fileKey.slice(root.length) : "";
+    const parts = relative.split("/").filter(Boolean);
 
-  // dossier actuel du fichier (pour ne pas proposer "move here")
-  let currentDir = root;
-  if (parts.length > 1) {
-    currentDir = root + parts.slice(0, -1).join("/") + "/";
-  }
+    let currentDir = root;
+    if (parts.length > 1) {
+      currentDir = root + parts.slice(0, -1).join("/") + "/";
+    }
 
-  // 1) Sortir → racine
-  if (parts.length > 1) {
-    moveDestinations.push({
-      key: root,
-      name: "My Files (leave folder → root)",
+    if (parts.length > 1) {
+      moveDestinations.push({ key: root, name: t("leaveRoot") });
+    }
+    if (parts.length > 2) {
+      const parentPath = root + parts.slice(0, -2).join("/") + "/";
+      moveDestinations.push({ key: parentPath, name: t("parentFolder") });
+    }
+    moveFolderOptions.forEach((f) => {
+      const dest = f.key.endsWith("/") ? f.key : `${f.key}/`;
+      if (dest === currentDir) return;
+      moveDestinations.push({
+        key: dest,
+        name: `${t("goToFolder")} “${f.name}”`,
+      });
     });
   }
 
-  // 2) Sortir → parent (si plus profond)
-  if (parts.length > 2) {
-    const parentPath = root + parts.slice(0, -2).join("/") + "/";
-    moveDestinations.push({
-      key: parentPath,
-      name: "Parent folder (go up one level)",
-    });
-  }
-
-  // 3) Aller dans un autre dossier (moi, Project, …)
-  moveFolderOptions.forEach((f) => {
-    const dest = f.key.endsWith("/") ? f.key : `${f.key}/`;
-    if (dest === currentDir) return; // déjà dedans
-    moveDestinations.push({
-      key: dest,
-      name: `Go to folder “${f.name}”`,
-    });
-  });
-}
   const shareIsFolder =
     shareModal &&
     ((typeof shareModal.key === "string" && shareModal.key.endsWith("/")) ||
@@ -667,7 +648,7 @@ if (moveModal) {
           }
         }
       `}</style>
-     
+
       <div
         style={{
           position: "fixed",
@@ -682,12 +663,12 @@ if (moveModal) {
           pointerEvents: "none",
         }}
       >
-        {toasts.map((t) => (
+        {toasts.map((toast) => (
           <div
-            key={t.id}
+            key={toast.id}
             style={{
               pointerEvents: "auto",
-              background: t.type === "error" ? "#991b1b" : "#0f172a",
+              background: toast.type === "error" ? "#991b1b" : "#0f172a",
               color: "#fff",
               padding: "12px 16px",
               borderRadius: 10,
@@ -696,15 +677,15 @@ if (moveModal) {
               boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
             }}
           >
-            {t.message}
+            {toast.message}
           </div>
         ))}
       </div>
 
       <div className="myfiles-header">
         <div>
-          <h2 className="page-heading">My Files</h2>
-          <p className="page-subtext">Files and folders in your SecureDrive workspace.</p>
+          <h2 className="page-heading">{t("myFilesTitle")}</h2>
+          <p className="page-subtext">{t("myFilesSub")}</p>
         </div>
         <div className="myfiles-actions">
           <input ref={uploadInputRef} type="file" hidden onChange={handleUploadHere} />
@@ -713,10 +694,10 @@ if (moveModal) {
             type="button"
             onClick={() => uploadInputRef.current?.click()}
           >
-            Upload here
+            {t("uploadHere")}
           </button>
           <button className="btn btn-solid" type="button" onClick={() => setFolderModal(true)}>
-            + New folder
+            + {t("newFolder")}
           </button>
         </div>
       </div>
@@ -731,10 +712,10 @@ if (moveModal) {
             load(root);
           }}
         >
-          My Files
+          {t("myFiles")}
         </button>
         {crumbs.map((c, i) => (
-          <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <span key={`${c}-${i}`} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
             <span style={{ opacity: 0.5 }}>/</span>
             <span style={{ fontWeight: i === crumbs.length - 1 ? 600 : 400 }}>{c}</span>
           </span>
@@ -746,7 +727,7 @@ if (moveModal) {
             style={{ padding: "4px 10px", fontSize: "0.8rem", marginLeft: 4 }}
             onClick={goUp}
           >
-            ↑ Up
+            ↑ {t("up")}
           </button>
         )}
       </div>
@@ -757,20 +738,20 @@ if (moveModal) {
 
       <div className="table-card myfiles-table-wrap">
         {loading ? (
-          <div style={{ padding: 24, textAlign: "center" }}>Loading…</div>
+          <div style={{ padding: 24, textAlign: "center" }}>{t("loading")}</div>
         ) : folders.length === 0 && files.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-title">This folder is empty</div>
-            <div className="empty-state-text">Create a folder or use Upload here.</div>
+            <div className="empty-state-title">{t("emptyFolder")}</div>
+            <div className="empty-state-text">{t("emptyFolderHint")}</div>
           </div>
         ) : (
           <table className="data-table">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Size</th>
-                <th>Modified</th>
-                <th>Actions</th>
+                <th>{t("name")}</th>
+                <th>{t("size")}</th>
+                <th>{t("modified")}</th>
+                <th>{t("actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -830,7 +811,7 @@ if (moveModal) {
           </table>
         )}
       </div>
-      
+
       {menu && (
         <div
           ref={menuPanelRef}
@@ -840,47 +821,61 @@ if (moveModal) {
           {menu.isFolder ? (
             <>
               <button type="button" onClick={() => openFolder(menu.item.key)}>
-                Open
+                {t("open")}
               </button>
-              <button type="button" onClick={() => shareModal(menu.item)}>
-                Share…
+              <button
+                type="button"
+                onClick={() => {
+                  setMenu(null);
+                  setShareEmail("");
+                  setShareModal(menu.item);
+                }}
+              >
+                {t("shareEllipsis")}
               </button>
               <button type="button" onClick={() => openMoveModal(menu.item)}>
-                Move…
+                {t("moveEllipsis")}
               </button>
               <button
                 type="button"
                 className="danger"
                 onClick={() => requestTrash(menu.item, true)}
               >
-                Delete folder
+                {t("deleteFolder")}
               </button>
             </>
           ) : (
             <>
               {canPreview(menu.item.name) && (
                 <button type="button" onClick={() => handlePreview(menu.item)}>
-                  Preview
+                  {t("preview")}
                 </button>
               )}
               <button type="button" onClick={() => requestDownload(menu.item)}>
-                Download
+                {t("download")}
               </button>
               <button type="button" onClick={() => toggleFavorite(menu.item)}>
-                {favoriteKeys.has(menu.item.key) ? "Remove favorite" : "Add to favorites"}
+                {favoriteKeys.has(menu.item.key) ? t("removeFavorite") : t("addFavorite")}
               </button>
-              <button type="button" onClick={() => shareModal(menu.item)}>
-                Share…
+              <button
+                type="button"
+                onClick={() => {
+                  setMenu(null);
+                  setShareEmail("");
+                  setShareModal(menu.item);
+                }}
+              >
+                {t("shareEllipsis")}
               </button>
               <button type="button" onClick={() => openMoveModal(menu.item)}>
-                Move to folder…
+                {t("moveToFolder")}
               </button>
               <button
                 type="button"
                 className="danger"
                 onClick={() => requestTrash(menu.item, false)}
               >
-                Move to trash
+                {t("moveToTrash")}
               </button>
             </>
           )}
@@ -889,12 +884,12 @@ if (moveModal) {
 
       {folderModal && (
         <Modal onClose={() => setFolderModal(false)}>
-          <h3 style={{ margin: "0 0 6px", fontSize: "1.15rem" }}>New folder</h3>
+          <h3 style={{ margin: "0 0 6px", fontSize: "1.15rem" }}>{t("newFolderTitle")}</h3>
           <p style={{ margin: "0 0 16px", color: "#64748b", fontSize: "0.9rem" }}>
-            Create a folder in the current location.
+            {t("newFolderHint")}
           </p>
           <form onSubmit={handleCreateFolder}>
-            <label style={{ fontSize: "0.85rem", fontWeight: 600 }}>Folder name</label>
+            <label style={{ fontSize: "0.85rem", fontWeight: 600 }}>{t("folderName")}</label>
             <input
               type="text"
               value={folderName}
@@ -905,14 +900,14 @@ if (moveModal) {
             />
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
               <button type="button" className="btn btn-outline" onClick={() => setFolderModal(false)}>
-                Cancel
+                {t("cancel")}
               </button>
               <button
                 type="submit"
                 className="btn btn-solid"
                 disabled={creating || !folderName.trim()}
               >
-                {creating ? "Creating…" : "Create"}
+                {creating ? t("creating") : t("create")}
               </button>
             </div>
           </form>
@@ -922,16 +917,13 @@ if (moveModal) {
       {shareModal && (
         <Modal onClose={() => setShareModal(null)}>
           <h3 style={{ margin: "0 0 6px", fontSize: "1.15rem" }}>
-            Share {shareIsFolder ? "folder" : "file"}
+            {shareIsFolder ? t("shareFolder") : t("shareFile")}
           </h3>
           <p style={{ margin: "0 0 16px", color: "#64748b", fontSize: "0.9rem" }}>
-            Share <b>{shareModal.name}</b>
-            {shareIsFolder
-              ? " (folder + files inside, according to permission)"
-              : ""}
+            <b>{shareModal.name}</b>
           </p>
           <form onSubmit={handleShare}>
-            <label style={{ fontSize: "0.85rem", fontWeight: 600 }}>Email</label>
+            <label style={{ fontSize: "0.85rem", fontWeight: 600 }}>{t("email")}</label>
             <input
               type="email"
               value={shareEmail}
@@ -944,79 +936,80 @@ if (moveModal) {
             <label
               style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginTop: 12 }}
             >
-              Permission
+              {t("permission")}
             </label>
             <select
               value={sharePermission}
               onChange={(e) => setSharePermission(e.target.value)}
               style={{ ...inputStyle, marginTop: 6 }}
             >
-              <option value="Read Only">Read Only</option>
-              <option value="Read & Write">Read & Write</option>
+              <option value="Read Only">{t("readOnly")}</option>
+              <option value="Read & Write">{t("readWrite")}</option>
             </select>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
               <button type="button" className="btn btn-outline" onClick={() => setShareModal(null)}>
-                Cancel
+                {t("cancel")}
               </button>
               <button
                 type="submit"
                 className="btn btn-solid"
                 disabled={sharing || !shareEmail.trim()}
               >
-                {sharing ? "Sharing…" : "Share"}
+                {sharing ? t("sharing") : t("share")}
               </button>
             </div>
           </form>
         </Modal>
       )}
 
-  {moveModal && (
-  <Modal onClose={() => setMoveModal(null)}>
-    <h3 style={{ margin: "0 0 6px", fontSize: "1.15rem" }}>Move</h3>
-    <p style={{ margin: "0 0 16px", color: "#64748b", fontSize: "0.9rem" }}>
-      File: <b>{moveModal.name}</b>
-      <br />
-      Choose: leave this folder, or move into another folder.
-    </p>
-    {moveDestinations.length === 0 ? (
-      <p style={{ color: "#64748b" }}>No destination available.</p>
-    ) : (
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 8,
-          maxHeight: 280,
-          overflowY: "auto",
-        }}
-      >
-        {moveDestinations.map((d) => (
-          <button
-            key={d.key}
-            type="button"
-            onClick={() => doMove(moveModal, d.key)}
-            style={{
-              textAlign: "left",
-              padding: "12px 14px",
-              borderRadius: 10,
-              border: "1px solid #e2e8f0",
-              background: "#f8fafc",
-              cursor: "pointer",
-              fontWeight: 500,
-            }}
-          >
-            {d.name}
-          </button>
-        ))}
-      </div>
-    )}
-    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
-      <button type="button" className="btn btn-outline" onClick={() => setMoveModal(null)}>
-        Cancel
-      </button>
-    </div>
-  </Modal>
-)}
+      {moveModal && (
+        <Modal onClose={() => setMoveModal(null)}>
+          <h3 style={{ margin: "0 0 6px", fontSize: "1.15rem" }}>{t("move")}</h3>
+          <p style={{ margin: "0 0 16px", color: "#64748b", fontSize: "0.9rem" }}>
+            <b>{moveModal.name}</b>
+            <br />
+            {t("moveHint")}
+          </p>
+          {moveDestinations.length === 0 ? (
+            <p style={{ color: "#64748b" }}>{t("noDestination")}</p>
+          ) : (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+                maxHeight: 280,
+                overflowY: "auto",
+              }}
+            >
+              {moveDestinations.map((d) => (
+                <button
+                  key={d.key}
+                  type="button"
+                  onClick={() => doMove(moveModal, d.key)}
+                  style={{
+                    textAlign: "left",
+                    padding: "12px 14px",
+                    borderRadius: 10,
+                    border: "1px solid #e2e8f0",
+                    background: "#f8fafc",
+                    cursor: "pointer",
+                    fontWeight: 500,
+                  }}
+                >
+                  {d.name}
+                </button>
+              ))}
+            </div>
+          )}
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+            <button type="button" className="btn btn-outline" onClick={() => setMoveModal(null)}>
+              {t("cancel")}
+            </button>
+          </div>
+        </Modal>
+      )}
+
       {confirm && (
         <Modal onClose={() => setConfirm(null)}>
           <h3 style={{ margin: "0 0 8px", fontSize: "1.15rem" }}>{confirm.title}</h3>
@@ -1025,7 +1018,7 @@ if (moveModal) {
           </p>
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <button type="button" className="btn btn-outline" onClick={() => setConfirm(null)}>
-              Cancel
+              {t("cancel")}
             </button>
             <button
               type="button"

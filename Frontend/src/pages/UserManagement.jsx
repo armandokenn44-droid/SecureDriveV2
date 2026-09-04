@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { t } from "../i18n.js";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
@@ -39,6 +40,7 @@ export default function UserManagement() {
   const [users, setUsers] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
   const [listError, setListError] = useState("");
+  const [, setTick] = useState(0);
 
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", role: "User" });
@@ -46,11 +48,16 @@ export default function UserManagement() {
   const [createError, setCreateError] = useState("");
   const [createdCredentials, setCreatedCredentials] = useState(null);
 
-  // Edit modal
   const [editUser, setEditUser] = useState(null);
   const [editForm, setEditForm] = useState({ firstName: "", lastName: "", role: "User" });
   const [editing, setEditing] = useState(false);
   const [editError, setEditError] = useState("");
+
+  useEffect(() => {
+    const onLang = () => setTick((x) => x + 1);
+    window.addEventListener("sd-lang-change", onLang);
+    return () => window.removeEventListener("sd-lang-change", onLang);
+  }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/immutability
@@ -253,55 +260,69 @@ export default function UserManagement() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
-          <h2 className="page-heading">User Management</h2>
-          <p className="page-subtext">{users.length} accounts total</p>
+          <h2 className="page-heading">{t("userManagement")}</h2>
+          <p className="page-subtext">
+            {users.length} {t("accountsTotal")}
+          </p>
         </div>
-        <button className="btn btn-solid" style={{ padding: "10px 18px" }} onClick={() => setShowModal(true)}>
-          + Add New User
+        <button
+          className="btn btn-solid"
+          style={{ padding: "10px 18px" }}
+          onClick={() => setShowModal(true)}
+        >
+          + {t("addNewUser")}
         </button>
       </div>
 
       {createdCredentials && (
         <div className="panel" style={{ borderLeft: "4px solid #16a34a", marginBottom: 16 }}>
           <div className="panel-title" style={{ marginBottom: 8 }}>
-            Credentials for {createdCredentials.name}
+            {t("credentialsFor")} {createdCredentials.name}
           </div>
           <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: 10 }}>
-            Share these credentials directly. This password will not be shown again.
+            {t("credentialsHint")}
           </p>
           <div style={{ fontFamily: "monospace", fontSize: "0.9rem" }}>
-            <div>Email: {createdCredentials.email}</div>
             <div>
-              Temporary password: <b>{createdCredentials.tempPassword}</b>
+              {t("email")}: {createdCredentials.email}
+            </div>
+            <div>
+              {t("tempPassword")}: <b>{createdCredentials.tempPassword}</b>
             </div>
           </div>
-          <button className="btn btn-outline" style={{ marginTop: 12 }} onClick={() => setCreatedCredentials(null)}>
-            Got it, dismiss
+          <button
+            className="btn btn-outline"
+            style={{ marginTop: 12 }}
+            onClick={() => setCreatedCredentials(null)}
+          >
+            {t("gotIt")}
           </button>
         </div>
       )}
 
       {listError && (
-        <div style={{ color: "#ef4444", marginBottom: 12, fontSize: "0.85rem" }}>{listError}</div>
+        <div style={{ color: "#ef4444", marginBottom: 12, fontSize: "0.85rem" }}>
+          {listError}
+        </div>
       )}
 
       <div className="table-card">
         <table className="data-table">
           <thead>
             <tr>
-              <th>User</th>
-              <th>Email Address</th>
-              <th>Role</th>
-              <th>Status</th>
-              <th>Storage</th>
-              <th style={{ textAlign: "right" }}>Actions</th>
+              <th>{t("userCol")}</th>
+              <th>{t("emailAddress")}</th>
+              <th>{t("role")}</th>
+              <th>{t("status")}</th>
+              <th>{t("storage")}</th>
+              <th style={{ textAlign: "right" }}>{t("actions")}</th>
             </tr>
           </thead>
           <tbody>
             {loadingList && (
               <tr>
                 <td colSpan={6} style={{ textAlign: "center", padding: 24 }}>
-                  Loading users…
+                  {t("loadingUsers")}
                 </td>
               </tr>
             )}
@@ -312,7 +333,12 @@ export default function UserManagement() {
                     <div className="file-name-cell">
                       <span
                         className="avatar-circle"
-                        style={{ background: u.color, width: 30, height: 30, fontSize: "0.68rem" }}
+                        style={{
+                          background: u.color,
+                          width: 30,
+                          height: 30,
+                          fontSize: "0.68rem",
+                        }}
                       >
                         {u.initials}
                       </span>
@@ -321,30 +347,46 @@ export default function UserManagement() {
                   </td>
                   <td>{u.email}</td>
                   <td>
-                    <span className={`tag ${ROLE_TAG_CLASS[u.role] || "tag-gray"}`}>{u.role}</span>
+                    <span className={`tag ${ROLE_TAG_CLASS[u.role] || "tag-gray"}`}>
+                      {u.role}
+                    </span>
                   </td>
                   <td>
-                    <span className={`tag ${u.status === "Active" ? "tag-green" : "tag-gray"}`}>
-                      {u.status}
+                    <span
+                      className={`tag ${u.status === "Active" ? "tag-green" : "tag-gray"}`}
+                    >
+                      {u.status === "Active" ? t("active") : t("disabled")}
                     </span>
                   </td>
                   <td>{u.storage}</td>
                   <td>
                     <div className="row-actions">
-                      <button className="icon-btn" title="Edit" onClick={() => openEdit(u)}>
+                      <button
+                        className="icon-btn"
+                        title={t("edit")}
+                        onClick={() => openEdit(u)}
+                      >
                         <EditIcon />
                       </button>
-                      <button className="icon-btn" title="Reset password" onClick={() => handleResetPassword(u)}>
+                      <button
+                        className="icon-btn"
+                        title={t("resetPassword")}
+                        onClick={() => handleResetPassword(u)}
+                      >
                         <KeyIcon />
                       </button>
                       <button
                         className="icon-btn"
-                        title={u.status === "Active" ? "Disable" : "Enable"}
+                        title={u.status === "Active" ? t("disable") : t("enable")}
                         onClick={() => handleToggleStatus(u)}
                       >
                         <BlockIcon />
                       </button>
-                      <button className="icon-btn" title="Delete" onClick={() => handleDelete(u)}>
+                      <button
+                        className="icon-btn"
+                        title={t("delete")}
+                        onClick={() => handleDelete(u)}
+                      >
                         <TrashIcon />
                       </button>
                     </div>
@@ -355,36 +397,61 @@ export default function UserManagement() {
         </table>
       </div>
 
-      {/* Modal Create */}
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-title">Create User Account</div>
-            <div className="modal-subtitle">A temporary password will be generated.</div>
+            <div className="modal-title">{t("createUserTitle")}</div>
+            <div className="modal-subtitle">{t("createUserSub")}</div>
             <form onSubmit={handleCreate}>
               <div className="form-group">
-                <label className="form-label">Full Name</label>
-                <input className="form-input" name="name" value={form.name} onChange={handleChange} required />
+                <label className="form-label">{t("fullName")}</label>
+                <input
+                  className="form-input"
+                  name="name"
+                  value={form.name}
+                  onChange={handleChange}
+                  required
+                />
               </div>
               <div className="form-group">
-                <label className="form-label">Professional Email</label>
-                <input className="form-input" type="email" name="email" value={form.email} onChange={handleChange} required />
+                <label className="form-label">{t("professionalEmail")}</label>
+                <input
+                  className="form-input"
+                  type="email"
+                  name="email"
+                  value={form.email}
+                  onChange={handleChange}
+                  required
+                />
               </div>
               <div className="form-group">
-                <label className="form-label">Role</label>
-                <select className="form-input" name="role" value={form.role} onChange={handleChange}>
+                <label className="form-label">{t("role")}</label>
+                <select
+                  className="form-input"
+                  name="role"
+                  value={form.role}
+                  onChange={handleChange}
+                >
                   <option value="User">User</option>
                   <option value="Manager">Manager</option>
                   <option value="Super Admin">Super Admin</option>
                 </select>
               </div>
               {createError && (
-                <div style={{ color: "#ef4444", marginBottom: 12, fontSize: "0.85rem" }}>{createError}</div>
+                <div style={{ color: "#ef4444", marginBottom: 12, fontSize: "0.85rem" }}>
+                  {createError}
+                </div>
               )}
               <div className="modal-actions">
-                <button type="button" className="btn btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => setShowModal(false)}
+                >
+                  {t("cancel")}
+                </button>
                 <button type="submit" className="btn btn-solid" disabled={creating}>
-                  {creating ? "Creating…" : "Create Account"}
+                  {creating ? t("creating") : t("createAccount")}
                 </button>
               </div>
             </form>
@@ -392,37 +459,42 @@ export default function UserManagement() {
         </div>
       )}
 
-      {/* Modal Edit */}
       {editUser && (
         <div className="modal-overlay" onClick={() => setEditUser(null)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-title">Edit User</div>
+            <div className="modal-title">{t("editUser")}</div>
             <div className="modal-subtitle">{editUser.email}</div>
             <form onSubmit={handleEdit}>
               <div className="form-group">
-                <label className="form-label">First Name</label>
+                <label className="form-label">{t("firstName")}</label>
                 <input
                   className="form-input"
                   value={editForm.firstName}
-                  onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, firstName: e.target.value })
+                  }
                   required
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Last Name</label>
+                <label className="form-label">{t("lastName")}</label>
                 <input
                   className="form-input"
                   value={editForm.lastName}
-                  onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, lastName: e.target.value })
+                  }
                   required
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Role</label>
+                <label className="form-label">{t("role")}</label>
                 <select
                   className="form-input"
                   value={editForm.role}
-                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, role: e.target.value })
+                  }
                 >
                   <option value="User">User</option>
                   <option value="Manager">Manager</option>
@@ -430,12 +502,20 @@ export default function UserManagement() {
                 </select>
               </div>
               {editError && (
-                <div style={{ color: "#ef4444", marginBottom: 12, fontSize: "0.85rem" }}>{editError}</div>
+                <div style={{ color: "#ef4444", marginBottom: 12, fontSize: "0.85rem" }}>
+                  {editError}
+                </div>
               )}
               <div className="modal-actions">
-                <button type="button" className="btn btn-outline" onClick={() => setEditUser(null)}>Cancel</button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => setEditUser(null)}
+                >
+                  {t("cancel")}
+                </button>
                 <button type="submit" className="btn btn-solid" disabled={editing}>
-                  {editing ? "Saving…" : "Save changes"}
+                  {editing ? t("saving") : t("saveChanges")}
                 </button>
               </div>
             </form>

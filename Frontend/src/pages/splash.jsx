@@ -1,10 +1,18 @@
-import  { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { t } from "../i18n.js";
 import "./splash.css";
 
 export default function Splash() {
   const navigate = useNavigate();
   const [progress, setProgress] = useState(0);
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const onLang = () => setTick((x) => x + 1);
+    window.addEventListener("sd-lang-change", onLang);
+    return () => window.removeEventListener("sd-lang-change", onLang);
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -21,8 +29,8 @@ export default function Splash() {
 
   useEffect(() => {
     if (progress >= 100) {
-      const t = setTimeout(() => navigate("/login"), 350);
-      return () => clearTimeout(t);
+      const timer = setTimeout(() => navigate("/login"), 350);
+      return () => clearTimeout(timer);
     }
   }, [progress, navigate]);
 
@@ -35,18 +43,18 @@ export default function Splash() {
         <h1 className="splash-title">
           Secure<span>Drive</span>
         </h1>
-        <p className="splash-subtitle">Enterprise File Platform &middot; v3.4.1</p>
+        <p className="splash-subtitle">{t("splashSubtitle")}</p>
 
         <div className="splash-progress-track">
           <div className="splash-progress-fill" style={{ width: `${progress}%` }} />
         </div>
         <p className="splash-status">
-          {progress < 100 ? "Loading secure environment…" : "Ready."}
+          {progress < 100 ? t("loadingSecure") : t("ready")}
         </p>
       </div>
 
       <button className="splash-skip" onClick={() => navigate("/login")}>
-        Continue to Login &rarr;
+        {t("continueToLogin")}
       </button>
     </div>
   );
