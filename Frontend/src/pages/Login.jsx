@@ -5,6 +5,20 @@ import "./Login.css";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
+function langBtnStyle(active) {
+  return {
+    border: "none",
+    background: active ? "#e2e8f0" : "transparent",
+    color: active ? "#0f172a" : "#94a3b8",
+    fontWeight: active ? 700 : 500,
+    fontSize: "0.75rem",
+    padding: "4px 8px",
+    borderRadius: 6,
+    cursor: "pointer",
+    letterSpacing: "0.02em",
+  };
+}
+
 export default function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
@@ -98,27 +112,26 @@ export default function Login() {
         </div>
       </div>
 
-      <div className="login-panel-right">
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 12 }}>
-          <button
-            type="button"
-            className="btn btn-outline"
-            style={{ padding: "4px 10px", fontWeight: lang === "en" ? 700 : 400 }}
-            onClick={() => setLang("en")}
-          >
+      <div className="login-panel-right" style={{ position: "relative" }}>
+        <div
+          style={{
+            position: "absolute",
+            top: 20,
+            right: 24,
+            display: "flex",
+            gap: 4,
+            zIndex: 2,
+          }}
+        >
+          <button type="button" onClick={() => setLang("en")} style={langBtnStyle(lang === "en")}>
             EN
           </button>
-          <button
-            type="button"
-            className="btn btn-outline"
-            style={{ padding: "4px 10px", fontWeight: lang === "fr" ? 700 : 400 }}
-            onClick={() => setLang("fr")}
-          >
+          <button type="button" onClick={() => setLang("fr")} style={langBtnStyle(lang === "fr")}>
             FR
           </button>
         </div>
 
-        <form className="login-form" onSubmit={handleSubmit}>
+        <form className="login-form" onSubmit={handleSubmit} style={{ paddingTop: 12 }}>
           <h2 className="login-form-title">{t("welcomeBack")}</h2>
           <p className="login-form-subtitle">{t("signInSubtitle")}</p>
 
@@ -187,8 +200,7 @@ export default function Login() {
           </div>
 
           <p className="login-footer-note">
-            {t("noAccount")}{" "}
-            <a href="#contact">{t("itAdmin")}</a>
+            {t("noAccount")} <a href="#contact">{t("itAdmin")}</a>
           </p>
         </form>
       </div>
@@ -203,6 +215,7 @@ function ShieldIcon() {
     </svg>
   );
 }
+
 function MailIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
@@ -211,6 +224,7 @@ function MailIcon() {
     </svg>
   );
 }
+
 function LockIcon({ small }) {
   const s = small ? 12 : 16;
   return (
@@ -220,6 +234,7 @@ function LockIcon({ small }) {
     </svg>
   );
 }
+
 function EyeIcon({ off }) {
   return off ? (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
